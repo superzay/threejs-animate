@@ -15,7 +15,7 @@ three
   |--fly // 飞线
   |--gradient // 渐变
   |--opcity // 透明
-  |-radar // 雷达
+  |--radar // 雷达
   |--line // 包围线
 
 ```
