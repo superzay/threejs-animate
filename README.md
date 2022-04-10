@@ -1,37 +1,21 @@
 # threejs动画特效
 
 #### 介绍
-对应这里的内容，需要你有基础的webgl知识，了解矩阵、向量、透视投影、裁剪空间、视图变换、着色器、threejs框架等等内容。本文通过网上查的资料，做了修改得到，在这里对网上的小伙伴表示感谢，同时分享给感兴趣的小伙伴参考
+对于这里的内容，需要你先去了解基础的webgl知识，了解矩阵、向量、透视投影、裁剪空间、视图变换、着色器原理、threejs框架等等内容。
 
-#### 软件架构
-软件架构说明
+之前在研究webgl和threejs的时候在网上查到了很多资料（包括郭隆绑的很多资料觉得很好），在此对所有小伙伴们表示感谢。这里也把之前研究的内容拆解出来，分享给感兴趣的小伙伴们学习研究和参考。也给大家推荐几本比较好的参考资料：OpenGL着色语言、OPENGL ES 3.0编程指南 第2版、3D游戏与计算机图形学中的数学方法  第3版。
 
-
-#### 安装教程
-
-1.  xxxx
-2.  xxxx
-3.  xxxx
+#### 目录结构
+README.md
+three
+  |__wall // 光幕
+  |__belt // 流动
+  |__grow // 生长
+  |__fly // 飞线
+  |__gradient // 渐变
+  |__opcity // 透明
+  |__radar // 雷达
+  |__line // 包围线
 
 #### 使用说明
-
-1.  xxxx
-2.  xxxx
-3.  xxxx
-
-#### 参与贡献
-
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
-
-
-#### 特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+直接下载项目，进入案例目录，运行index.html文件，即可查看
