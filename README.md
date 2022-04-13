@@ -22,6 +22,7 @@ three
   |--opcity // 透明
   |--radar // 雷达
   |--line // 包围线
+  |--chinaMap // 3D中国地图
 
 ```
  
