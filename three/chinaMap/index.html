@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>threejs</title>
+  <style>
+    body {
+      padding: 0;
+      margin: 0
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      background: #fff;
+    }
+  </style>
+</head>
+
+<body>
+
+</body>
+<script type='module'>
+  import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
+  import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
+
+  (async function () {
+    // 加载中国地图数据
+    const promise = new Promise((resolve, reject) => {
+      var xhr = new XMLHttpRequest();
+      xhr.open('get', './assets/map/china.json');
+      xhr.timeout = 1000000;
+      xhr.ontimeout = function () {
+        reject()
+      };
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4) {
+          if (xhr.status == 200) {
+            resolve(JSON.parse(xhr.response))
+          } else {
+            reject()
+          }
+        }
+      }
+      xhr.send();
+    })
+
+    const [state, mapData, err] = await promise.then(rs => [true, rs, null], err => [false, null, err])
+    if (!state) return
+    // 打印
+    console.log(mapData)
+
+
+    //创建渲染器
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.setClearColor('#fff', 1);
+    document.body.appendChild(renderer.domElement);
+
+
+    //创建场景
+    var scene = new THREE.Scene();
+
+    //创建相机
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
+    camera.position.z = 500; //设置相机位置
+    //camera.lookAt(new )
+    scene.add(camera)
+
+    /**
+     *创建几何体，材质，物体 
+     */
+
+    // 坐标转换函数
+    function coordTrans(coord, center) {
+      // 然后把中心点已到坐标系原点，重新计算其他点坐标
+      return [coord[0] - center[0], coord[1] - center[1]]
+    }
+
+    // 由于地图数据里没给出中国地理中心的位置，这里人为取个大概位置
+    const center = [108, 34]
+    // 创建5种颜色
+    const colors = ['#395866', '#00ffff', '#c95f0b', '#395866', '#903106']
+
+
+    // 遍历省份
+    const group = new THREE.Group()
+    mapData.features.forEach((feature, featureIndex) => {
+      if (feature.properties.level != 'province') return
+
+      // 创建形状
+      const shapes = []
+      feature.geometry.coordinates.forEach((subPart, index) => {
+        const shape = new THREE.Shape();
+
+        let subPart_coords = subPart[0]
+        if (feature.properties.name == '内蒙古自治区') {
+          subPart_coords = subPart
+        }
+
+        let real_firstCoord
+        subPart_coords.forEach((coord, index1) => {
+          // 先将点坐标转换为平面直角坐标系下的坐标
+          // 将中国的地理中心变换至平面直角坐标系原点，同时高纬度在平面直角坐标系中处于上方
+          const real_coord = coordTrans(coord, center)
+          if (index1 == 0) {
+            // 表示起点
+            shape.moveTo(real_coord[0], real_coord[1]);
+            real_firstCoord = real_coord
+
+          } else {
+            // 表示非起点
+            shape.lineTo(real_coord[0], real_coord[1]);
+          }
+
+          // 如果是最后一个点，闭合曲线
+          if (index1 == subPart_coords[0].length - 1) {
+            real_firstCoord && shape.lineTo(real_firstCoord[0], real_firstCoord[1]);
+          }
+        })
+        shapes.push(shape)
+      })
+
+      // 创建几何体
+      const geometry = new THREE.ExtrudeGeometry(shapes, {
+        steps: 1, // 分段数量
+        depth: 50, // 拉伸长度
+        bevelEnabled: false, // 不启用
+      });
+
+      // 创建材质
+      const material = new THREE.MeshPhongMaterial({
+        color: colors[featureIndex % colors.length],
+        side: THREE.DoubleSide,
+        //wireframe: true,//网格线框显示
+      })
+
+      // 创建物体，并加入组
+      const province = new THREE.Mesh(geometry, material)
+      group.add(province)
+    })
+
+    // 调整下group的姿态
+    group.scale.set(10, 10, 1) // 经纬度太密，放大一下
+    group.updateMatrix() // 更新相对矩阵
+    group.rotateX(Math.PI / 180 * -10) // 顺时针旋转10度
+    group.rotateY(Math.PI / 180 * 15) // 逆时针旋转15度
+
+    // 把组添加进场景
+    scene.add(group);
+
+    // 添加点光源
+    let light1 = new THREE.PointLight('#fff');
+    light1.position.set(0, 1160, 22160);
+    scene.add(light1)
+
+    // 添加环境光
+    let ambient = new THREE.AmbientLight('#999');
+    scene.add(ambient)
+
+    // 添加辅助线
+    let axisHelper = new THREE.AxisHelper(500);
+    scene.add(axisHelper);
+
+    // 创建控制器
+    let controls = new OrbitControls(camera, renderer.domElement)
+
+    //渲染函数
+    function render() {
+      controls.update() // Update controls
+      //渲染场景
+      renderer.render(scene, camera);
+      requestAnimationFrame(render)
+    }
+
+    //发起渲染
+    requestAnimationFrame(render)
+  })()
+
+</script>
+
+
+</html>
