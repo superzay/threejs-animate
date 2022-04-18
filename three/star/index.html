@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>threejs</title>
+  <style>
+    body {
+      padding: 0;
+      margin: 0
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      background: #fff;
+    }
+  </style>
+</head>
+
+<body>
+
+</body>
+<script type='module'>
+  import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
+  import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
+
+  (async function () {
+    //创建渲染器
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.setClearColor('#000', 1);
+    document.body.appendChild(renderer.domElement);
+
+
+    //创建场景
+    var scene = new THREE.Scene();
+
+    //创建相机
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
+    camera.position.z = 500; //设置相机位置
+    //camera.lookAt(new )
+    scene.add(camera)
+
+
+    // 添加点光源
+    let light1 = new THREE.PointLight('#fff');
+    light1.position.set(0, 1160, 22160);
+    // scene.add(light1)
+
+    // 添加环境光
+    let ambient = new THREE.AmbientLight('#fff', 0.5);
+    scene.add(ambient)
+
+    // 添加辅助线
+    let axisHelper = new THREE.AxisHelper(500);
+    //scene.add(axisHelper);
+
+    // 创建控制器
+    let controls = new OrbitControls(camera, renderer.domElement)
+
+    //渲染函数
+    function render() {
+      controls.update() // Update controls
+      //渲染场景
+      renderer.render(scene, camera);
+      requestAnimationFrame(render)
+    }
+
+    //发起渲染
+    requestAnimationFrame(render)
+
+    // 加载纹理图
+    const promiseStar = new Promise((resolve, reject) => {
+      new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/xingxing2.png", function (texture) {
+        resolve(texture)
+      });
+    })
+    const promiseEarth = new Promise((resolve, reject) => {
+      new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-earth.png", function (texture) {
+        resolve(texture)
+      });
+    })
+    const [state, [textureStar, textureEarth], err] = await Promise.all([promiseStar, promiseEarth]).then(rs => [true, rs, null], err => [false, null, err])
+    if (!state) return
+
+    // 定义Point类
+    class Point {
+      constructor() {
+        this.range = 5000; // 粒子分布半径
+        this.center = { // 粒子分布中心
+          x: 0,
+          y: 0,
+          z: 0,
+        }
+        this.position = { // 粒子位置
+          x: Math.random() * 2 * this.range + this.center.x - this.range,
+          y: Math.random() * 2 * this.range + this.center.y - this.range,
+          z: Math.random() * 2 * this.range + this.center.z - this.range
+        };
+        this.speed = { // 粒子移动速度
+          x: Math.random() * 10 - 5,
+          y: Math.random() * 10 - 5,
+          z: Math.random() * 10 - 5,
+        }
+        this.color = '#aaa';// 粒子颜色
+        this.createTime = Date.now(); // 创建时间
+        this.updateTime = Date.now(); // 上次更新时间
+      }
+
+      // 更新粒子位置
+      updatePosition() {
+        const time = Date.now() - this.updateTime
+        this.updateTime = Date.now()
+        this.position.x += this.speed.x * time / 1000
+        this.position.y += this.speed.y * time / 1000
+        this.position.z += this.speed.z * time / 1000
+      }
+    }
+
+    // 批量创建粒子
+    const vertices = []
+    for (let i = 0; i < 10000; i++) {
+      vertices.push(new Point())
+    }
+
+    // 先创建一个空的缓冲几何体
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([]), 3)); // 一个顶点由3个坐标构成
+
+    // 创建材质
+    const material = new THREE.PointsMaterial({
+      size: 15,
+      map: textureStar, // 纹理图
+      transparent: true,
+      // 禁止深度缓冲区
+      depthWrite: false,
+
+    });
+
+    // 创建点，并添加进场景
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+
+
+
+    // 不间断更新粒子位置
+    setInterval(() => {
+      const list = []
+      vertices.forEach(point => {
+        point.updatePosition()
+        const { x, y, z } = point.position
+        list.push(x, y, z)
+      })
+
+      // 更新几何体
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(list), 3));
+
+    }, 50)
+
+    // 地球
+    const earthGeometry = new THREE.SphereGeometry(80, 100, 100)
+    const earthMaterial = new THREE.MeshPhongMaterial({
+      map: textureEarth
+    })
+    const earth = new THREE.Mesh(earthGeometry, earthMaterial)
+    scene.add(earth)
+
+  })()
+
+</script>
+
+
+</html>
