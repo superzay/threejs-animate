@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>threejs</title>
+  <style>
+    body {
+      padding: 0;
+      margin: 0
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      background: #fff;
+    }
+  </style>
+</head>
+
+<body>
+
+</body>
+<script type='module'>
+  import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
+  import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
+
+
+  (async function () {
+    //创建渲染器
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.setClearColor('#fff', 1);
+    document.body.appendChild(renderer.domElement);
+
+
+    //创建场景
+    var scene = new THREE.Scene();
+
+
+    //创建相机
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100000);
+    camera.position.z = 2300; //设置相机位置
+    camera.position.y = 2300; //设置相机位置
+    //camera.lookAt(new )
+    scene.add(camera)
+
+
+    // 添加点光源
+    let light1 = new THREE.PointLight('#fff');
+    light1.position.set(0, 1160, 22160);
+    // scene.add(light1)
+
+
+    // 添加环境光
+    let ambient = new THREE.AmbientLight('#fff', 0.5);
+    scene.add(ambient)
+
+
+    // 添加辅助线
+    let axisHelper = new THREE.AxisHelper(500);
+    scene.add(axisHelper);
+
+
+    // 创建控制器
+    let controls = new OrbitControls(camera, renderer.domElement)
+
+
+    // 渲染函数
+    function render() {
+      controls.update() // Update controls
+      // 渲染场景
+      renderer.render(scene, camera);
+      requestAnimationFrame(render)
+    }
+    requestAnimationFrame(render)// 发起渲染
+
+
+    // 加载纹理图
+    const promiseStar = new Promise((resolve, reject) => {
+      new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-smoke.png", function (texture) {
+        resolve(texture)
+      });
+    })
+    const [state, textureStar, err] = await promiseStar.then(rs => [true, rs, null], err => [false, null, err])
+    if (!state) return
+
+
+    // 先创建一个空的缓冲几何体
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([]), 3)); // 一个顶点由3个坐标构成
+    geometry.setAttribute('a_opacity', new THREE.BufferAttribute(new Float32Array([]), 1)); // 点的透明度，用1个浮点数表示
+    geometry.setAttribute('a_size', new THREE.BufferAttribute(new Float32Array([]), 1)); // 点的初始大小，用1个浮点数表示
+    geometry.setAttribute('a_scale', new THREE.BufferAttribute(new Float32Array([]), 1)); // 点的放大量，用1个浮点数表示
+
+
+    // 创建材质
+    const material = new THREE.PointsMaterial({
+      color: '#666',
+      map: textureStar, // 纹理图
+      transparent: true,// 开启透明度
+      depthWrite: false, // 禁止深度写入
+    });
+
+
+    // 修正着色器
+    material.onBeforeCompile = function (shader) {
+      const vertexShader_attribute = `
+        attribute float a_opacity;
+        attribute float a_size;
+        attribute float a_scale;
+        varying float v_opacity;
+        void main() {
+          v_opacity = a_opacity;
+        `
+      const vertexShader_size = `
+        gl_PointSize = a_size * a_scale;
+        `
+      shader.vertexShader = shader.vertexShader.replace('void main() {', vertexShader_attribute)
+      shader.vertexShader = shader.vertexShader.replace('gl_PointSize = size;', vertexShader_size)
+
+      const fragmentShader_varying = `
+        varying float v_opacity;
+        void main() {          
+      `
+      const fragmentShader_opacity = `
+        gl_FragColor = vec4( outgoingLight, diffuseColor.a * v_opacity );         
+      `
+      shader.fragmentShader = shader.fragmentShader.replace('void main() {', fragmentShader_varying)
+      shader.fragmentShader = shader.fragmentShader.replace('gl_FragColor = vec4( outgoingLight, diffuseColor.a );', fragmentShader_opacity)
+    }
+
+
+    // 创建点，并添加进场景
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+
+
+    // 同时在场景中添加一个平面，做参考面
+    const planeGeometry = new THREE.PlaneGeometry(6000, 3000)
+    const planeMaterial = new THREE.MeshBasicMaterial({
+      color: '#D2B48C',
+      side: THREE.DoubleSide
+    })
+    const plane = new THREE.Mesh(planeGeometry, planeMaterial)
+    plane.rotateX(Math.PI / 180 * -90)
+    scene.add(plane) // 添加平面
+
+
+    // 定义Partical类
+    class Partical {
+      constructor(range = 10, center = { x: 0, y: 0, z: 0 }) {
+        this.range = range; // 粒子的分布半径
+        this.center = center // 粒子的分布中心
+        this.life = 5000; // 粒子的存活时间，毫秒
+        this.createTime = Date.now(); // 粒子创建时间
+        this.updateTime = Date.now(); // 上次更新时间
+        this.size = 500 // 粒子大小
+
+        // 粒子透明度，及系数
+        this.opacityFactor = 0.4
+        this.opacity = 1 * this.opacityFactor
+
+        // 粒子放大量，及放大系数
+        this.scaleFactor = 2
+        this.scale = 1 + this.scaleFactor * (this.updateTime - this.createTime) / this.life // 初始1，到达生命周期时为3
+
+        // 粒子位置
+        this.position = {
+          x: Math.random() * 2 * this.range + this.center.x - this.range,
+          y: this.center.y,
+          z: Math.random() * 2 * this.range + this.center.z - this.range,
+        }
+
+        // 水平方向的扩散
+        let speedAround = Math.random() * 40
+        if (speedAround < 20) speedAround -= 50
+        if (speedAround > 20) speedAround += 10
+
+        // 粒子的扩散速度
+        this.speed = {
+          x: speedAround,
+          y: Math.random() * 100 + 300,
+          z: speedAround,
+        }
+
+      }
+
+      // 更新粒子
+      update() {
+        const now = Date.now()
+        const time = now - this.updateTime
+
+        // 更新位置
+        this.position.x += this.speed.x * time / 1000
+        this.position.y += this.speed.y * time / 1000
+        this.position.z += this.speed.z * time / 1000
+
+        // 计算粒子透明度
+        this.opacity = 1 - (now - this.createTime) / this.life
+        this.opacity *= this.opacityFactor
+        if (this.opacity < 0) this.opacity = 0
+
+        // 计算放大量
+        this.scale = 1 + this.scaleFactor * (now - this.createTime) / this.life
+        if (this.scale > 1 + this.scaleFactor) this.scale = 1 + this.scaleFactor
+
+        // 重置更新时间
+        this.updateTime = now
+      }
+    }
+
+
+    // 创建粒子
+    let particals = []
+    setInterval(() => {
+      particals.push(new Partical(10, { x: 0, y: 100, z: 0 }))
+    }, 500)
+    //particals.push(new Partical(10, { x: 0, y: 100, z: 0 }))
+
+
+    // 校验粒子，并更新粒子位置等数据
+    setInterval(() => {
+      particals = particals.filter(partical => {
+        partical.update()
+        if (partical.updateTime - partical.createTime > partical.life) {
+          return false
+        } else {
+          return true
+        }
+      })
+      if (!particals.length) return
+
+      // 遍历粒子,收集属性
+      const positionList = []
+      const opacityList = []
+      const scaleList = []
+      const sizeList = []
+      particals.forEach(partical => {
+        const { x, y, z } = partical.position
+        positionList.push(x, y, z)
+        opacityList.push(partical.opacity)
+        scaleList.push(partical.scale)
+        sizeList.push(partical.size)
+      })
+
+      // 粒子属性写入
+      geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positionList), 3));
+      geometry.setAttribute('a_opacity', new THREE.BufferAttribute(new Float32Array(opacityList), 1));
+      geometry.setAttribute('a_scale', new THREE.BufferAttribute(new Float32Array(scaleList), 1));
+      geometry.setAttribute('a_size', new THREE.BufferAttribute(new Float32Array(sizeList), 1));
+
+    }, 20)
+
+  })()
+
+</script>
+
+
+</html>
