@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>骨骼动画</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+</head>
+
+<body style="padding:0;margin:0"></body>
+<script type="module">
+  import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
+  import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
+
+  // 渲染器
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // 相机
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 200);
+  camera.position.set(0, 70, 70)
+
+  // 控制器
+  const orbit = new OrbitControls(camera, renderer.domElement);
+
+  // 场景
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color('#444');
+
+  // 光源
+  const light = new THREE.PointLight('#fff', 0.7);
+  light.position.set(1000, 1000, 0)
+  scene.add(light);
+
+  // 添加辅助线
+  let axisHelper = new THREE.AxisHelper(50);
+  scene.add(axisHelper);
+
+  // 渲染
+  !(function render() {
+    requestAnimationFrame(render);
+    renderer.render(scene, camera);
+  })()
+
+
+
+  // 创建几何体、材质、蒙皮模型
+  const height = 40
+  const segmentHeight = 10
+  const geometry = new THREE.CylinderGeometry(5, 5, height, 8, 12,);
+  // 创建材质
+  const material = new THREE.MeshPhongMaterial({
+    color: '#656289',
+    emissive: '#072534',
+    side: THREE.DoubleSide,
+    flatShading: true
+  });
+  // 蒙皮模型
+  const mesh = new THREE.SkinnedMesh(geometry, material);
+  mesh.position.set(0, height / 2, 0)
+  scene.add(mesh);
+
+
+
+  // 创建骨骼系统
+  let bone1 = new THREE.Bone();
+  bone1.position.set(0, -height / 2, 0)
+
+  let bone2 = new THREE.Bone()
+  bone1.add(bone2)
+  bone2.position.set(0, segmentHeight, 0)
+
+  let bone3 = new THREE.Bone()
+  bone2.add(bone3)
+  bone3.position.set(0, segmentHeight, 0)
+
+  let bone4 = new THREE.Bone()
+  bone3.add(bone4)
+  bone4.position.set(0, segmentHeight, 0)
+
+  let bone5 = new THREE.Bone()
+  bone4.add(bone5)
+  bone5.position.set(0, segmentHeight, 0)
+
+  // 创建骨架，并将根骨关节和骨架加入蒙皮模型
+  const skeleton = new THREE.Skeleton([bone1, bone2, bone3, bone4, bone5]);
+  mesh.add(bone1);
+  mesh.bind(skeleton);
+
+  // 创建骨架辅助线
+  const skeletonHelper = new THREE.SkeletonHelper(mesh);
+  skeletonHelper.material.linewidth = 2;
+  scene.add(skeletonHelper);
+
+
+
+
+  // 给几何体顶点绑定骨骼和权重（设置顶点的蒙皮索引和蒙皮权重）
+  const skinIndices = [];
+  const skinWeights = [];
+  // 遍历顶点
+  for (let i = 0; i < geometry.attributes.position.count; i++) {
+    const vertex = new THREE.Vector3();
+    vertex.fromBufferAttribute(geometry.attributes.position, i);
+    const y = vertex.y + height / 2
+    const skinIndex = Math.floor(y / segmentHeight);
+    const skinWeight = (y % segmentHeight) / segmentHeight;
+    skinIndices.push(skinIndex, skinIndex + 1, 0, 0);
+    skinWeights.push(1 - skinWeight, skinWeight, 0, 0);
+
+  }
+
+  // 设置几何体中顶点的蒙皮索引，和蒙皮权重
+  geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(skinIndices, 4));
+  geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+
+
+
+  // 骨骼运动
+  const period = 2000
+  let step = 0.35 // 步进速度，单位度
+
+  setTimeout(() => {
+    step = 0 - step // 步进取反
+    setInterval(() => {
+      step = 0 - step // 步进取反
+    }, period)
+  }, period / 2)
+
+
+  setInterval(() => {
+    // 遍历骨关节
+    for (let i = 0; i < mesh.skeleton.bones.length; i++) {
+      mesh.skeleton.bones[i].rotation.z += Math.PI / 180 * step
+    }
+  }, 20)
+
+</script>
+
+</html>
