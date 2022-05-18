@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>threejs</title>
+  <meta http-equiv="content-type" content="text/html;charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes">
+  <metahttp-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+  <style>
+    html,
+    body {
+      padding: 0;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%
+    }
+  </style>
+</head>
+
+<body>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
+    import { GLTFLoader } from 'https://cdn.skypack.dev/three@v0.129.0/examples//jsm/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
+
+    // 创建渲染器
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight) // 设置canvas画布大小
+    document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+    // 创建场景
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color('#347897');
+
+    // 辅助线
+    var axisHelper = new THREE.AxisHelper(500);
+    scene.add(axisHelper);
+
+    // 添加点光源
+    let light1 = new THREE.PointLight('#fff', 2);
+    light1.position.set(0, 1160, -22160);
+    scene.add(light1)
+
+    //环境光
+    let ambient = new THREE.AmbientLight('#fff', 1);
+    scene.add(ambient)
+
+    // 创建相机
+    var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
+    camera.position.set(0, 230, 370) // 设置相机位置
+
+
+    // 创建控制器
+    let controls = new OrbitControls(camera, renderer.domElement)
+    //controls.autoRotate = true
+
+    // 渲染
+    !(function render() {
+      controls.update() // Update controls
+      renderer.render(scene, camera);
+      requestAnimationFrame(render)
+    })()
+
+
+    // 创建平面，几何体，材质
+    const texture = new THREE.TextureLoader().load('http://182.43.179.137:81/public/images/texture-wood2.jpg'); // 立方纹理加载器
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.repeat.set(10, 10);
+    var geometry = new THREE.PlaneGeometry(3000, 3000);; // 平面几何体
+    var material = new THREE.MeshPhongMaterial({ map: texture, side: THREE.DoubleSide });
+    var plane = new THREE.Mesh(geometry, material); // 创建模型
+    plane.rotateX(Math.PI / 180 * 90)
+    scene.add(plane) // 加入场景
+
+
+    // 创建点数组（通过贝塞尔曲线）
+    const curve = new THREE.CubicBezierCurve3(
+      new THREE.Vector3(-300, 0, 0),
+      new THREE.Vector3(-50, 150, 0),
+      new THREE.Vector3(50, 150, 0),
+      new THREE.Vector3(300, 0, 0)
+    );
+    const pointsPosition = curve.getPoints(5000); // 点数组，5000个采样点
+    const lineLength = 500 // 飞线长度，800个点
+    let currentIndex = 0 // 当前索引
+    const circle = 3000 // 周期2秒
+    const startTime = Date.now() // 开始时间
+
+    // 创建缓冲几何体
+    const pointsGeometry = new THREE.BufferGeometry();
+
+    setInterval(() => {
+      const now = Date.now() // 当前时间
+      currentIndex = (now - startTime) % circle / circle * pointsPosition.length // 当前索引
+      currentIndex = Math.floor(currentIndex) // 索引修正
+      if (currentIndex > pointsPosition.length) currentIndex = 0 // 索引修正
+
+      // 飞线点位数组
+      const lineArr = pointsPosition.filter((point, index) => {
+        if (index >= currentIndex && index <= currentIndex + lineLength) return true
+      })
+      const arr = lineArr.reduce((arr, point) => {
+        const { x, y, z } = point
+        arr.push(x, y, z)
+        return arr
+      }, [])
+
+      // 几何体中添加位置属性
+      pointsGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3)); // 一个顶点由3个坐标构成
+
+      // 几何体添加图元尺寸的缩放属性
+      const aScaleArr = lineArr.map((point, index) => { return index / lineLength })
+      pointsGeometry.setAttribute('aScale', new THREE.BufferAttribute(new Float32Array(aScaleArr), 1)); // 一个缩放量由1个浮点数表示
+
+    }, 50)
+
+    // 纹理和材质
+    const pointTexture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/circle.png");
+    const pointsMaterial = new THREE.PointsMaterial({
+      color: '#FF00FF',
+      map: pointTexture, // 材质含有透明度
+      transparent: true, // 开启透明度
+      depthWrite: false, // 禁用深度写入
+      size: 7,// 点大小
+      sizeAttenuation: true, // 大小是否随相机深度衰减
+    });
+
+   // 修正图元大小
+    pointsMaterial.onBeforeCompile = (shader) => {
+      const vertex = `
+        attribute float aScale;
+        void main() {          
+      `
+      const vertex1 = `gl_PointSize = size * aScale;` 
+      shader.vertexShader = shader.vertexShader.replace("void main() {", vertex);
+      shader.vertexShader = shader.vertexShader.replace("gl_PointSize = size;", vertex1);
+    }
+
+    // 创建点系统，加入场景
+    const points = new THREE.Points(pointsGeometry, pointsMaterial);
+    scene.add(points);
+
+
+
+    // 图元重新排序
+    setInterval(() => {
+      // 提取点
+      const position = pointsGeometry.attributes.position
+      const scale = pointsGeometry.attributes.aScale // 缩放属性
+      const { count, array, itemSize } = position
+      const pointArr = []
+      for (let i = 0; i < count; i++) {
+        const point = {
+          position: [array[i * itemSize + 0], array[i * itemSize + 1], array[i * itemSize + 2],],
+          scale: scale.array[i]
+        }
+        pointArr.push(point)
+      }
+
+      // 重排序
+      pointArr.sort((point2, point1) => {
+        const v1 = new THREE.Vector3(...point1.position)
+        const v2 = new THREE.Vector3(...point2.position)
+        if (v1.applyMatrix4(points.modelViewMatrix).z > v2.applyMatrix4(points.modelViewMatrix).z) return -1 // 交互顺序
+        return 1 // 不交换顺序
+      })
+
+      // 更新几何体的position位置
+      const arr = pointArr.reduce((arr, point) => {
+        arr.push(...point.position)
+        return arr
+      }, [])
+      pointsGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3)); // 一个顶点由3个坐标构成
+
+
+      // 更新几何体的aScale数据
+      const arr1 = pointArr.reduce((arr, point) => {
+        arr.push(point.scale)
+        return arr
+      }, [])
+      pointsGeometry.setAttribute('aScale', new THREE.BufferAttribute(new Float32Array(arr1), 1)); // 一个缩放量由1个浮点数表示
+
+    }, 50)
+
+  </script>
+</body>
+
+</html>
