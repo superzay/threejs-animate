@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>threejs</title>
+  <meta http-equiv="content-type" content="text/html;charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes">
+  <metahttp-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+  <style>
+    html,
+    body,
+    #app {
+      padding: 0;
+      margin: 0;
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+    }
+
+    .canvas {
+      height: 200vh;
+      width: 200vw;
+    }
+
+    canvas {
+      transform-origin: 0 0;
+      transform: scale(0.5);
+    }
+
+    .widget {
+      position: fixed;
+      bottom: 30px;
+      left: 20px;
+      width: 80px;
+
+    }
+
+    .widget .input {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+
+    }
+
+    .widget .input span {
+      width: 23px;
+      flex-grow: 0;
+      flex-shrink: 0;
+    }
+
+    .widget .input input {
+      display: block;
+      width: 10px;
+      flex-shrink: 1;
+      flex-grow: 1;
+      font-size: 12px;
+      border: 1px solid #0d8beb !important;
+      outline: none;
+    }
+
+    .slide {
+      width: 100%;
+      height: 25px;
+      position: relative;
+    }
+
+    .orbit {
+      width: 100%;
+      height: 5px;
+      border-radius: 4px;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: #0d8beb
+    }
+
+    .orbit .tick {
+      width: 10px;
+      height: 10px;
+
+      border-radius: 50%;
+      position: absolute;
+      top: 50%;
+      left: 0px;
+      transform: translate(-50%, -50%);
+      background: #0d8beb
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app" ref="">
+    <div ref="canvas" class="canvas"></div>
+    <div v-if="false" class="widget">
+      <div class="input">
+        <span>a = </span><input type="number">
+      </div>
+
+      <div class="slide">
+        <div class="orbit">
+          <div class="tick"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/vue@next"></script>
+  <script src="https://unpkg.com/vue-router@4"></script>
+  <script src="https://unpkg.com/vuex@4"></script>
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
+    import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
+
+    const app = Vue.createApp({
+      el: '#app',
+      setup(props) {
+        const vm = Vue.getCurrentInstance().proxy
+        const setup = Vue.reactive({})
+
+        Vue.onMounted(
+          function () {
+
+            // 创建渲染器
+            var renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth * 2, window.innerHeight * 2)
+            console.log(vm)
+            vm.$refs.canvas.appendChild(renderer.domElement); // canvas画布插入dom树
+
+            // 创建场景
+            var scene = new THREE.Scene();
+            scene.background = new THREE.Color('#fff');
+
+            // 辅助线
+            // var axisHelper = new THREE.AxisHelper(500);
+            //scene.add(axisHelper);
+
+            // 添加点光源
+            let light1 = new THREE.PointLight('#fff', 0.7);
+            light1.position.set(0, 1160, -22160);
+            scene.add(light1)
+
+            // 添加点光源
+            let light2 = new THREE.PointLight('#fff', 0.7);
+            light2.position.set(11110, 1160, 22160);
+            scene.add(light2)
+
+            //环境光
+            let ambient = new THREE.AmbientLight('#fff', 0.39);
+            scene.add(ambient)
+
+            // 创建相机
+            var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
+            camera.position.set(100, 130, 170) // 设置相机位置
+
+
+            // 创建控制器
+            let controls = new OrbitControls(camera, renderer.domElement)
+            //controls.autoRotate = true
+
+            // 渲染
+            !(function render() {
+              controls.update() // Update controls
+              renderer.render(scene, camera);
+              requestAnimationFrame(render)
+            })()
+
+            const r = 25 // 半径
+            const h = 40 // 高度
+            const position = [0, -h / 2, 0] // 位置
+            const position1 = [0, h / 2, 0] 
+            const planePosition = [0, -15, 0] 
+
+            // 点采样
+            const curve = new THREE.EllipseCurve(0, 0, r, r, 0, 2 * Math.PI);
+            const points = curve.getPoints(3500);
+
+            // 圆锥
+            const geometry = new THREE.ConeGeometry(r, h, 32);
+            const material = new THREE.MeshPhongMaterial({ color: '#EABBBB' });
+            const cone = new THREE.Mesh(geometry, material);
+            cone.position.set(...position)
+            scene.add(cone);
+
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: '#ffff00', lineWidth: 6 }));
+            line.position.set(...position)
+            //scene.add(line);
+
+            // 圆锥1
+            const geometry1 = new THREE.ConeGeometry(r, h, 32);
+            const material1 = new THREE.MeshPhongMaterial({ color: '#EABBBB' });
+            const cone1 = new THREE.Mesh(geometry1, material1);
+            cone1.position.set(...position1)
+            cone1.rotateX(Math.PI)
+            scene.add(cone1);
+
+            const edges1 = new THREE.EdgesGeometry(geometry1);
+            const line1 = new THREE.LineSegments(edges1, new THREE.LineBasicMaterial({ color: '#ffff00', lineWidth: 6 }));
+            line1.position.set(...position1)
+            line1.rotateX(Math.PI)
+            // scene.add(line1);
+
+
+            // 平面
+            const geometry2 = new THREE.PlaneGeometry(120, 60);
+            const material2 = new THREE.MeshBasicMaterial({ color: '#9BA88C', side: THREE.DoubleSide });
+            const plane = new THREE.Mesh(geometry2, material2);
+            plane.position.set(...planePosition)
+            plane.rotateX(Math.PI / 180 * 90)
+
+            setInterval(() => {
+              plane.rotateY(Math.PI / 180 * 2)
+            }, 50)
+            scene.add(plane);
+
+            // 圆锥曲线
+            setInterval(() => {
+              // 清理
+              const coneLine = scene.getObjectByName('coneLine')
+              coneLine && scene.remove(coneLine)
+              const coneLineClone = scene.getObjectByName('coneLineClone')
+              coneLineClone && scene.remove(coneLineClone)
+
+              const coneLine1 = scene.getObjectByName('coneLine1')
+              coneLine1 && scene.remove(coneLine1)
+              const coneLineClone1 = scene.getObjectByName('coneLineClone1')
+              coneLineClone1 && scene.remove(coneLineClone1)
+
+              !(function () {
+                let position = cone.getWorldPosition(new THREE.Vector3())
+                let pointArr = points.map((point) => {
+                  let newPoint = new THREE.Vector3(point.x, point.y, 0).applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+                  newPoint.set(newPoint.x, position.y - h / 2, newPoint.z)
+                  return newPoint
+                })
+                // 斜边长度
+                const length = Math.sqrt(r * r + h * h)
+
+                // 交点
+                let intersectPointArr = pointArr.map((point) => {
+                  const origin = position.clone()
+                  origin.set(origin.x, origin.y + h / 2, origin.z)
+                  const raycaster = new THREE.Raycaster(origin, point.clone().sub(origin).normalize());
+                  plane.updateMatrix()
+                  plane.updateMatrixWorld(true) 
+                  plane.updateWorldMatrix(true, true)
+                  const intersects = raycaster.intersectObject(plane);
+                  if (intersects.length && intersects[0].distance <= length) return intersects[0].point
+                  return null
+                })
+
+                // 渲染交点
+                intersectPointArr = intersectPointArr.filter(point => point)
+                const material = new THREE.PointsMaterial({ color: '#FFA500', size: 0.5, sizeAttenuation: true });
+                const geometry = new THREE.BufferGeometry().setFromPoints(intersectPointArr);
+                const pointse = new THREE.Points(geometry, material);
+                pointse.name = 'coneLine'
+                scene.add(pointse);
+
+                const clone = pointse.clone()
+                clone.name = 'coneLineClone'
+                clone.position.set(-80, 0, 0)
+                scene.add(clone)
+              })()
+
+              // 圆锥1曲线
+              !(function () {
+                let position = cone1.getWorldPosition(new THREE.Vector3())
+                let pointArr = points.map((point) => {
+                  let newPoint = new THREE.Vector3(point.x, point.y, 0).applyMatrix4(new THREE.Matrix4().makeRotationX(Math.PI / 2))
+                  newPoint.set(newPoint.x, position.y + h / 2, newPoint.z)
+                  return newPoint
+                })
+                // 斜边长度
+                const length = Math.sqrt(r * r + h * h)
+
+                // 交点
+                let intersectPointArr = pointArr.map((point) => {
+                  const origin = position.clone()
+                  origin.set(origin.x, origin.y - h / 2, origin.z)
+                  const raycaster = new THREE.Raycaster(origin, point.clone().sub(origin).normalize());
+                  plane.updateMatrixWorld(true)
+                  const intersects = raycaster.intersectObject(plane);
+                  if (intersects.length && intersects[0].distance <= length) return intersects[0].point
+                  return null
+                })
+
+                // 渲染交点
+                intersectPointArr = intersectPointArr.filter(point => point)
+                const material = new THREE.PointsMaterial({ color: '#FFA500', size: 0.5, sizeAttenuation: true });
+                const geometry = new THREE.BufferGeometry().setFromPoints(intersectPointArr);
+                const pointse = new THREE.Points(geometry, material);
+                pointse.name = 'coneLine1'
+                scene.add(pointse);
+
+                const clone = pointse.clone()
+                clone.name = 'coneLineClone1'
+                clone.position.set(-80, 0, 0)
+                scene.add(clone)
+              })()
+
+            }, 20)
+
+            // 坐标轴
+            const axisLength = 160
+            const segmentLength = 10
+            const tickLength = 3
+
+            // x坐标轴 
+            let xAxis
+            !(function () {
+              const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-axisLength / 2, 0, 0), new THREE.Vector3(axisLength / 2, 0, 0)]);
+              const material = new THREE.LineBasicMaterial({ color: '#ff0000', });
+              xAxis = new THREE.Line(geometry, material);
+              scene.add(xAxis);
+
+              // 刻度线
+              for (let i = 0; i <= axisLength / segmentLength; i++) {
+                // x坐标轴
+                const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, -tickLength)]);
+                const material = new THREE.LineBasicMaterial({ color: '#ff0000', });
+                const tick = new THREE.Line(geometry, material);
+                tick.position.set(-axisLength / 2 + i * segmentLength, 0, 0)
+                xAxis.add(tick)
+              }
+
+              // 箭头
+              const arrowRadius = 3
+              const arrowHeight = 7
+              const geometry1 = new THREE.ConeGeometry(arrowRadius, arrowHeight, 17);
+              const material1 = new THREE.MeshPhongMaterial({ color: '#ff0000' });
+              const arrow = new THREE.Mesh(geometry1, material1);
+              arrow.rotateZ(-Math.PI / 180 * 90)
+              arrow.position.set(axisLength / 2 + arrowHeight / 2, 0, 0)
+              xAxis.add(arrow);
+
+              // 文字
+              const fontUrl = 'https://cdn.skypack.dev/three@v0.129.0/examples/fonts/helvetiker_regular.typeface.json'
+              new THREE.FontLoader().load(fontUrl, function (font) {
+                const textGeometry = new THREE.TextGeometry('x', {
+                  font: font,
+                  size: 8,
+                  height: 0.5,
+                });
+                const textMaterial = new THREE.MeshPhongMaterial({ color: '#ff0000' });
+                const text = new THREE.Mesh(textGeometry, textMaterial)
+                text.position.set(axisLength / 2, 8, 0)
+                xAxis.add(text);
+              })
+
+            })()
+
+            // y坐标轴
+            let yAxis
+            !(function () {
+              const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -axisLength / 2, 0), new THREE.Vector3(0, axisLength / 2, 0)]);
+              const material = new THREE.LineBasicMaterial({ color: '#2E8B57', });
+              yAxis = new THREE.Line(geometry, material);
+              scene.add(yAxis);
+
+              // 刻度线
+              for (let i = 0; i <= axisLength / segmentLength; i++) {
+                // y坐标轴
+                const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(-tickLength, 0, 0)]);
+                const material = new THREE.LineBasicMaterial({ color: '#2E8B57', });
+                const tick = new THREE.Line(geometry, material);
+                tick.position.set(0, -axisLength / 2 + i * segmentLength, 0)
+                yAxis.add(tick)
+              }
+
+              // 箭头
+              const arrowRadius = 3
+              const arrowHeight = 7
+              const geometry1 = new THREE.ConeGeometry(arrowRadius, arrowHeight, 17);
+              const material1 = new THREE.MeshPhongMaterial({ color: '#2E8B57' });
+              const arrow = new THREE.Mesh(geometry1, material1);
+              arrow.position.set(0, axisLength / 2 + arrowHeight / 2, 0)
+              yAxis.add(arrow);
+
+              // 文字
+              const fontUrl = 'https://cdn.skypack.dev/three@v0.129.0/examples/fonts/helvetiker_regular.typeface.json'
+              new THREE.FontLoader().load(fontUrl, function (font) {
+                const textGeometry = new THREE.TextGeometry('y', {
+                  font: font,
+                  size: 8,
+                  height: 0.5,
+                });
+                const textMaterial = new THREE.MeshPhongMaterial({ color: '#2E8B57' });
+                const text = new THREE.Mesh(textGeometry, textMaterial)
+                text.position.set(-11, axisLength / 2, 0)
+                yAxis.add(text);
+              })
+
+            })()
+
+            // z坐标轴
+            let zAxis
+            !(function () {
+              const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -axisLength / 2), new THREE.Vector3(0, 0, axisLength / 2)]);
+              const material = new THREE.LineBasicMaterial({ color: '#0000ff', });
+              zAxis = new THREE.Line(geometry, material);
+              scene.add(zAxis);
+
+              // 刻度线
+              for (let i = 0; i <= axisLength / segmentLength; i++) {
+                // y坐标轴
+                const geometry = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(-tickLength, 0, 0)]);
+                const material = new THREE.LineBasicMaterial({ color: '#0000ff', });
+                const tick = new THREE.Line(geometry, material);
+                tick.position.set(0, 0, -axisLength / 2 + i * segmentLength)
+                zAxis.add(tick)
+              }
+
+              // 箭头
+              const arrowRadius = 3
+              const arrowHeight = 7
+              const geometry1 = new THREE.ConeGeometry(arrowRadius, arrowHeight, 17);
+              const material1 = new THREE.MeshPhongMaterial({ color: '#0000ff' });
+              const arrow = new THREE.Mesh(geometry1, material1);
+              arrow.rotateX(Math.PI / 180 * 90)
+              arrow.position.set(0, 0, axisLength / 2 + arrowHeight / 2)
+              zAxis.add(arrow);
+
+              // 文字
+              const fontUrl = 'https://cdn.skypack.dev/three@v0.129.0/examples/fonts/helvetiker_regular.typeface.json'
+              new THREE.FontLoader().load(fontUrl, function (font) {
+                const textGeometry = new THREE.TextGeometry('z', {
+                  font: font,
+                  size: 8,
+                  height: 0.5,
+                });
+                const textMaterial = new THREE.MeshPhongMaterial({ color: '#0000ff' });
+                const text = new THREE.Mesh(textGeometry, textMaterial)
+                text.position.set(-11, 0, axisLength / 2)
+                zAxis.add(text);
+              })
+
+            })()
+          })
+
+        return setup
+
+      }
+    })
+
+    const rootVm = app.mount('#app')
+
+
+
+  </script>
+</body>
+
+</html>
