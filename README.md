@@ -33,6 +33,8 @@ three
   |--scenery // 360°实景
   |--walk // 自由行走
   |--fly1 // 飞线（粒子系统版本）
+  |--math
+      |--boneCurve // 圆锥曲线3D图解
 
 ```
  
