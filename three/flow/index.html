@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>threejs</title>
+  <meta http-equiv="content-type" content="text/html;charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no">
+  <metahttp-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+  <style>
+    html,
+    body {
+      padding: 0;
+      margin: 0;
+      overflow: hidden;
+    }
+
+    /*     canvas {
+      width: 200vw !important;
+      height: 200vh !important;
+      transform: scale(0.5);
+      transform-origin: 0 0;
+    } */
+  </style>
+</head>
+
+<body>
+
+  <script type="module">
+    import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
+    import { GLTFLoader } from 'https://cdn.skypack.dev/three@v0.129.0/examples//jsm/loaders/GLTFLoader.js';
+    import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
+
+    // 创建渲染器
+    var renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight) // 设置canvas画布大小
+    document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+    // 创建场景
+    var scene = new THREE.Scene();
+    scene.background = new THREE.Color('#347897');
+
+    // 辅助线
+    var axisHelper = new THREE.AxisHelper(500);
+    scene.add(axisHelper);
+
+    // 添加点光源
+    let light1 = new THREE.PointLight('#fff', 2);
+    light1.position.set(0, 1160, -22160);
+    scene.add(light1)
+
+    //环境光
+    let ambient = new THREE.AmbientLight('#fff', 1);
+    scene.add(ambient)
+
+    // 创建相机
+    var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
+    camera.position.set(0, 230, 470) // 设置相机位置
+
+
+    // 创建控制器
+    let controls = new OrbitControls(camera, renderer.domElement)
+    controls.autoRotate = true
+
+    // 渲染
+    !(function render() {
+      controls.update() // Update controls
+      renderer.render(scene, camera);
+      requestAnimationFrame(render)
+    })()
+
+
+
+    // 点系统分成2组
+    let rate = 0 // 第一组粒子数占比
+    let num = 10000 // 粒子总数
+    const curve = new THREE.CatmullRomCurve3([// 创建点数组
+      new THREE.Vector3(-200, 30, 0),
+      new THREE.Vector3(-50, 150, 0),
+      new THREE.Vector3(50, 150, 0),
+      new THREE.Vector3(200, 30, 0),
+      new THREE.Vector3(200, 100, -270),
+      new THREE.Vector3(100, 0, -10),
+      new THREE.Vector3(-100, -30, 200),
+      new THREE.Vector3(200, -30, 300),
+    ]);
+    const pointsPosition = curve.getPoints(num - 1);
+
+
+    // 第一组点系统
+    // 缓冲几何体
+    const pointsGeometry1 = new THREE.BufferGeometry();
+    // 纹理和材质
+    const pointTexture1 = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/circle.png");
+    const pointsMaterial1 = new THREE.PointsMaterial({
+      map: pointTexture1,
+      alphaTest: 0.9,
+      size: 2,// 点大小
+      sizeAttenuation: false, // 随相机深度衰减
+    });
+    // 修正顶点着色器
+    pointsMaterial1.onBeforeCompile = (shader) => {
+      const vertex = `
+        attribute float aScale; // 接收几何体中顶点的缩放
+        void main() {          
+      `
+      const vertex1 = `gl_PointSize = size * aScale;` // 应用缩放
+      shader.vertexShader = shader.vertexShader.replace("void main() {", vertex);
+      //shader.vertexShader = shader.vertexShader.replace("gl_PointSize = size;", vertex1);
+    }
+    const points1 = new THREE.Points(pointsGeometry1, pointsMaterial1);
+    scene.add(points1);
+
+
+
+    // 第二组点系统
+    // 缓冲几何体
+    const pointsGeometry2 = new THREE.BufferGeometry();
+    // 纹理和材质
+    const pointTexture2 = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/circle.png");
+    const pointsMaterial2 = new THREE.PointsMaterial({
+      color: '#ff0000',
+      map: pointTexture2,
+      alphaTest: 0.9,
+      size: 2,// 点大小
+      sizeAttenuation: false,// 随相机深度衰减
+    });
+    // 修正顶点着色器
+    pointsMaterial2.onBeforeCompile = (shader) => {
+      const vertex = `
+        attribute float aScale; // 接收几何体中顶点的缩放
+        void main() {          
+      `
+      const vertex1 = `gl_PointSize = size * aScale;` // 应用缩放
+      shader.vertexShader = shader.vertexShader.replace("void main() {", vertex);
+      //shader.vertexShader = shader.vertexShader.replace("gl_PointSize = size;", vertex1);
+    }
+    const points2 = new THREE.Points(pointsGeometry2, pointsMaterial2);
+    scene.add(points2);
+
+    // 流动
+    setInterval(() => {
+      if (rate >= 1) {
+        rate = 0
+      }
+      rate += 0.01;
+      rate > 1 && (rate = 1)
+
+      // 更新点系统1的几何体数据
+      !(function () {
+        const firstGroupNum = Math.floor(num * rate) // 第一组点的数量
+        const arr = pointsPosition.filter((point, index) => {
+          return index < firstGroupNum
+        }).reduce((arr, point) => {
+          const { x, y, z } = point
+          arr.push(x, y, z)
+          return arr
+        }, [])
+        const aScaleArr = pointsPosition.map((point, index) => {
+          return index / num
+        }).filter((pointScale, index) => {
+          return index < firstGroupNum
+        })
+
+        // 更新缓冲几何体
+        pointsGeometry1.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3)); // 一个顶点由3个坐标构成
+        pointsGeometry1.setAttribute('aScale', new THREE.BufferAttribute(new Float32Array(aScaleArr), 1)); // 一个缩放量由1个浮点数表示
+
+      })()
+
+
+      // 更新点系统2的几何体数据
+      !(function () {
+        const firstGroupNum = Math.floor(num * rate) // 第一组点的数量
+        const arr = pointsPosition.filter((point, index) => {
+          return index >= firstGroupNum
+        }).reduce((arr, point) => {
+          const { x, y, z } = point
+          arr.push(x, y, z)
+          return arr
+        }, [])
+        const aScaleArr = pointsPosition.map((point, index) => {
+          return index / num
+        }).filter((pointScale, index) => {
+          return index >= firstGroupNum
+        })
+
+        // 更新缓冲几何体
+        pointsGeometry2.setAttribute('position', new THREE.BufferAttribute(new Float32Array(arr), 3)); // 一个顶点由3个坐标构成
+        pointsGeometry2.setAttribute('aScale', new THREE.BufferAttribute(new Float32Array(aScaleArr), 1)); // 一个缩放量由1个浮点数表示
+
+      })()
+
+
+    }, 50)
+
+
+
+
+
+  </script>
+</body>
+
+</html>
