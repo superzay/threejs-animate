@@ -35,7 +35,9 @@ three
   |--fly1 // 飞线（粒子系统版本）
   |--flow // 曲线色彩流淌
   |--math
-      |--boneCurve // 圆锥曲线3D图解
+  |   |--boneCurve // 圆锥曲线3D图解
+  |--charts
+       |--pie // 3D图表，饼图
   
 
 ```
