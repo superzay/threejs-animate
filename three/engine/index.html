@@ -1,304 +1,319 @@
 <!DOCTYPE html>
 <html>
+  <head>
+    <title>threejs</title>
+    <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <style></style>
+  </head>
 
-<head>
-  <title>threejs</title>
-  <meta http-equiv="content-type" content="text/html;charset=UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1,maximum-scale=1,user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <style>
+  <body></body>
 
-  </style>
-</head>
+  <script type="module">
+    import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+    import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+    import { Water } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/objects/Water.js";
+    import { Sky } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/objects/Sky.js";
+    import * as CANNON from "http://182.43.179.137:81/public/cannon-es/cannon-es-0.19.0.js";
 
-<body></body>
+    // 创建渲染器
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor("#fff", 1);
+    renderer.shadowMap.enabled = true; // 阴影
+    document.body.appendChild(renderer.domElement);
 
-<script type="module">
-  import * as THREE from 'https://cdn.skypack.dev/three@v0.129.0';
-  import { OrbitControls } from 'https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js';
-  import * as CANNON from 'http://182.43.179.137:81/public/cannon-es/cannon-es-0.19.0.js'
+    // 创建场景
+    var scene = new THREE.Scene();
+    setInterval(() => {
+      scene.rotateY((Math.PI / 180) * -0.3);
+    }, 50);
 
-  // 创建渲染器
-  var renderer = new THREE.WebGLRenderer();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setClearColor('#fff', 1);
-  renderer.shadowMap.enabled = true; // 阴影
-  document.body.appendChild(renderer.domElement);
+    // 创建相机
+    var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 10000);
+    camera.position.set(400, 150, 0);
+    camera.lookAt(scene.position);
 
-  // 创建场景
-  var scene = new THREE.Scene();
-  setInterval(() => {
-    scene.rotateY(Math.PI / 180 * -0.3)
-  }, 50)
+    // 创建控制器
+    var controls = new OrbitControls(camera, renderer.domElement);
+    controls.maxPolarAngle = (Math.PI / 180) * 80;
+    controls.rotateSpeed = 0.1;
+    controls.autoRotate = true;
 
-  // 创建相机
-  var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 10000);
-  camera.position.set(0, 150, 600);
-  camera.lookAt(scene.position);
+    // 创建辅助坐标系
+    scene.add(new THREE.AxesHelper(10));
 
-  // 创建控制器
-  var controls = new OrbitControls(camera, renderer.domElement);
+    // 创建方向光光源
+    var point = new THREE.DirectionalLight("#fff", 1);
+    point.position.set(200, 200, 300); // 位置
+    point.castShadow = true; // 阴影
+    point.shadow.camera.near = 20;
+    point.shadow.camera.far = 3000;
+    point.shadow.camera.top = 3000;
+    point.shadow.camera.bottom = -3000;
+    point.shadow.camera.left = -3000;
+    point.shadow.camera.right = 3000;
+    scene.add(point);
 
-  // 创建辅助坐标系
-  scene.add(new THREE.AxesHelper(10));
+    // 创建环境光
+    var ambient = new THREE.AmbientLight("#fff", 0.6);
+    scene.add(ambient);
 
-  // 创建方向光光源
-  var point = new THREE.DirectionalLight('#fff', 1);
-  point.position.set(200, 200, 300); // 位置
-  point.castShadow = true; // 阴影
-  point.shadow.camera.near = 20;
-  point.shadow.camera.far = 3000;
-  point.shadow.camera.top = 3000;
-  point.shadow.camera.bottom = -3000;
-  point.shadow.camera.left = -3000;
-  point.shadow.camera.right = 3000;
-  scene.add(point);
+    // 定义墙
+    const wall = {
+      position: [240, 0, -150], // 左下角位置
+      thickness: 10, // 厚度
+      length: 300, // 长度
+      height: 50, // 高度
+      lengthSegmentNum: 10, // 长度分段数量
+      heightSegmentNum: 5, // 高度分段数量
+      direction: [0, 0, 1], // 长度方向向量
+      cross: [0, 1, 0], // 高度方向向量
+      blocks: [], // 墙块数组
+    };
 
+    // 定义下落物
+    const drop = {
+      shapes: ["box", "sphere"], // 形状
+      size: 36, // 尺寸
+      position: [0, 500, 0], // 初始位置
+      number: 42, // 总数量
+      time: 2, // 总创建时长
+      blocks: [], // 下落物体数组
+    };
 
-  // 创建环境光
-  var ambient = new THREE.AmbientLight('#fff', 0.6);
-  scene.add(ambient);
+    // 创建cannonjs世界坐标系
+    const world = new CANNON.World();
 
+    // 创建内容，20秒循环一次
+    !(function create() {
+      setTimeout(() => {
+        create();
+      }, 20000);
 
+      // 清理数据
+      const arr = [...wall.blocks, ...drop.blocks];
+      arr.forEach((mesh) => {
+        world.removeBody(mesh.cannon);
+        scene.remove(mesh);
+      });
+      wall.blocks = [];
+      drop.blocks = [];
 
-  // 定义墙
-  const wall = {
-    position: [240, 0, -150], // 左下角位置
-    thickness: 10, // 厚度
-    length: 300, // 长度
-    height: 50, // 高度
-    lengthSegmentNum: 10, // 长度分段数量
-    heightSegmentNum: 5,// 高度分段数量
-    direction: [0, 0, 1], // 长度方向向量
-    cross: [0, 1, 0], // 高度方向向量
-    blocks: [], // 墙块数组
-  }
+      /**
+       * threejs内容创建
+       */
+      !(function () {
+        // 创建墙
+        const texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-stone2.jpg");
+        for (let i = 0; i < wall.lengthSegmentNum; i++) {
+          for (let j = 0; j < wall.heightSegmentNum; j++) {
+            // 墙块长、宽、厚
+            const length = wall.length / wall.lengthSegmentNum;
+            const height = wall.height / wall.heightSegmentNum;
+            const thickness = wall.thickness;
+            // 创建墙块几何体、材质
+            const geometry = new THREE.BoxGeometry(length, height, thickness);
+            const material = new THREE.MeshPhongMaterial({ color: "#fff", map: texture });
+            const mesh = new THREE.Mesh(geometry, material); // 墙块
+            // 方向向量归一化
+            const direction = new THREE.Vector3(...wall.direction).normalize();
+            const cross = new THREE.Vector3(...wall.cross).normalize();
+            // 修正墙块姿态
+            const quaternion_x = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction);
+            const _y = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion_x);
+            const quaternion_y = new THREE.Quaternion().setFromUnitVectors(_y, cross);
+            mesh.quaternion.copy(quaternion_x.multiply(quaternion_y));
+            mesh.updateMatrix(); // 更新
+            // 修正墙块位置
+            const position = new THREE.Vector3(...wall.position);
+            position.add(direction.multiplyScalar(length * i));
+            position.add(cross.multiplyScalar(height * j));
+            position.add(new THREE.Vector3(length / 2, height / 2, -thickness / 2).applyQuaternion(quaternion_x).applyQuaternion(quaternion_y));
+            mesh.position.copy(position);
+            mesh.updateMatrix(); // 更新
+            mesh.castShadow = true; //阴影
+            // 挂载长、高、厚，备用
+            mesh._length = length;
+            mesh._height = height;
+            mesh._thickness = thickness;
 
+            // 创建墙块包围线
+            const lineGeometry = new THREE.EdgesGeometry(mesh.geometry);
+            const lineMaterial = new THREE.LineBasicMaterial({
+              color: "#000",
+              transparent: true,
+              opacity: 0.2,
+            });
+            const line = new THREE.LineSegments(lineGeometry, lineMaterial);
+            mesh.add(line); // 墙块添加包围线
 
-  // 定义下落物
-  const drop = {
-    shapes: ['box', 'sphere'], // 形状
-    size: 36, // 尺寸
-    position: [0, 500, 0], // 初始位置
-    number: 42,// 总数量
-    time: 2,// 总创建时长
-    blocks: [], // 下落物体数组
-  }
-
-  // 创建cannonjs世界坐标系
-  const world = new CANNON.World();
-
-  // 创建内容，20秒循环一次
-  !(function create() {
-    setTimeout(() => {
-      create()
-    }, 20000)
-
-    // 清理数据
-    const arr = [...wall.blocks, ...drop.blocks]
-    arr.forEach(mesh => {
-      world.removeBody(mesh.cannon)
-      scene.remove(mesh)
-    })
-    wall.blocks = []
-    drop.blocks = []
-
-
-    /**
-     * threejs内容创建
-     */
-    !(function () {
-      // 创建墙
-      const texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-stone2.jpg");
-      for (let i = 0; i < wall.lengthSegmentNum; i++) {
-        for (let j = 0; j < wall.heightSegmentNum; j++) {
-          // 墙块长、宽、厚
-          const length = wall.length / wall.lengthSegmentNum
-          const height = wall.height / wall.heightSegmentNum
-          const thickness = wall.thickness
-          // 创建墙块几何体、材质
-          const geometry = new THREE.BoxGeometry(length, height, thickness)
-          const material = new THREE.MeshPhongMaterial({ color: '#fff', map: texture })
-          const mesh = new THREE.Mesh(geometry, material) // 墙块
-          // 方向向量归一化
-          const direction = new THREE.Vector3(...wall.direction).normalize()
-          const cross = new THREE.Vector3(...wall.cross).normalize()
-          // 修正墙块姿态
-          const quaternion_x = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), direction)
-          const _y = new THREE.Vector3(0, 1, 0).applyQuaternion(quaternion_x)
-          const quaternion_y = new THREE.Quaternion().setFromUnitVectors(_y, cross)
-          mesh.quaternion.copy(quaternion_x.multiply(quaternion_y))
-          mesh.updateMatrix() // 更新
-          // 修正墙块位置
-          const position = new THREE.Vector3(...wall.position)
-          position.add(direction.multiplyScalar(length * i))
-          position.add(cross.multiplyScalar(height * j))
-          position.add(new THREE.Vector3(length / 2, height / 2, -thickness / 2).applyQuaternion(quaternion_x).applyQuaternion(quaternion_y))
-          mesh.position.copy(position)
-          mesh.updateMatrix() // 更新
-          mesh.castShadow = true; //阴影
-          // 挂载长、高、厚，备用
-          mesh._length = length
-          mesh._height = height
-          mesh._thickness = thickness
-
-          // 创建墙块包围线
-          const lineGeometry = new THREE.EdgesGeometry(mesh.geometry);
-          const lineMaterial = new THREE.LineBasicMaterial({
-            color: '#000',
-            transparent: true,
-            opacity: 0.2,
-          });
-          const line = new THREE.LineSegments(lineGeometry, lineMaterial)
-          mesh.add(line) // 墙块添加包围线
-
-          wall.blocks.push(mesh) // 推入blocks
-          scene.add(mesh) // 推入场景
-
+            wall.blocks.push(mesh); // 推入blocks
+            scene.add(mesh); // 推入场景
+          }
         }
-      }
 
-      // 创建下落物
-      const texture_wood = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-wood.jpg");
-      const texture_earth = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-earth.png");
-      const timer = setInterval(() => {
-        if (drop.blocks.length >= drop.number) {
-          clearInterval(timer)
-          return
+        // 创建下落物
+        const texture_wood = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-wood.jpg");
+        const texture_earth = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-earth.png");
+        const timer = setInterval(() => {
+          if (drop.blocks.length >= drop.number) {
+            clearInterval(timer);
+            return;
+          }
+          // 创建下落物几何体、材质
+          const type = drop.shapes[Math.floor(Math.random() * 2)];
+          const geometry = type == "box" ? new THREE.BoxGeometry(drop.size, drop.size, drop.size) : new THREE.SphereGeometry(drop.size / 2, 100, 100);
+          const material = new THREE.MeshPhongMaterial({ color: "#fff", map: type == "box" ? texture_wood : texture_earth });
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh._type = type;
+          // 修正落下物位置
+          let [x, y, z] = drop.position;
+          x += Math.random() * drop.size;
+          y += drop.blocks.length * drop.size;
+          mesh.position.copy(new THREE.Vector3(x, y, z));
+          mesh.castShadow = true; // 阴影
+          drop.blocks.push(mesh); // 推入blocks
+          scene.add(mesh); // 加入场景
+        }, (drop.time / drop.number) * 1000);
+
+        // 创建水面
+        const waterGeometry = new THREE.CircleGeometry(10000, 10000);
+        const water = new Water(waterGeometry, {
+          textureWidth: 512,
+          textureHeight: 512,
+          waterNormals: new THREE.TextureLoader().load("http://182.43.179.137:81/threejs/engine/waternormals.jpg", function (texture) {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+          }),
+          sunDirection: new THREE.Vector3(),
+          sunColor: 0xffd700,
+          waterColor: "#AFEEEE",
+          distortionScale: 3.7,
+          fog: scene.fog !== undefined,
+        });
+        water.position.set(0, 10, 0);
+        water.rotation.x = -Math.PI / 2;
+        scene.add(water);
+
+        // 水面波动
+        setInterval(() => {
+          water.material.uniforms["time"].value += 1.0 / 20.0;
+        }, 50);
+
+        // 天空盒
+        const sky = new Sky();
+        sky.scale.setScalar(10000);
+        scene.add(sky);
+        const skyUniforms = sky.material.uniforms;
+        skyUniforms["turbidity"].value = 10;
+        skyUniforms["rayleigh"].value = 2;
+        skyUniforms["mieCoefficient"].value = 0.005;
+        skyUniforms["mieDirectionalG"].value = 0.8;
+        const parameters = {
+          elevation: 2,
+          azimuth: 180,
+        };
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+        const sun = new THREE.Vector3();
+        function updateSun() {
+          const phi = THREE.MathUtils.degToRad(90 - parameters.elevation);
+          const theta = THREE.MathUtils.degToRad(parameters.azimuth);
+          sun.setFromSphericalCoords(1, phi, theta);
+          sky.material.uniforms["sunPosition"].value.copy(sun);
+          water.material.uniforms["sunDirection"].value.copy(sun).normalize();
+          scene.environment = pmremGenerator.fromScene(sky).texture;
         }
-        // 创建下落物几何体、材质
-        const type = drop.shapes[Math.floor(Math.random() * 2)]
-        const geometry = type == 'box' ? new THREE.BoxGeometry(drop.size, drop.size, drop.size) : new THREE.SphereGeometry(drop.size / 2, 100, 100)
-        const material = new THREE.MeshPhongMaterial({ color: '#fff', map: type == 'box' ? texture_wood : texture_earth })
-        const mesh = new THREE.Mesh(geometry, material)
-        mesh._type = type
-        // 修正落下物位置
-        let [x, y, z] = drop.position
-        x += Math.random() * drop.size
-        y += drop.blocks.length * drop.size
-        mesh.position.copy(new THREE.Vector3(x, y, z))
-        mesh.castShadow = true; // 阴影
-        drop.blocks.push(mesh) // 推入blocks
-        scene.add(mesh) // 加入场景
-      }, drop.time / drop.number * 1000)
+        updateSun();
+      })();
 
-      // 创建地面
-      const planeGeometry = new THREE.PlaneGeometry(2000, 1000)
-      const planeMaterial = new THREE.MeshPhongMaterial({
-        color: '#D4F2E7',
-        side: THREE.DoubleSide
-      })
-      const plane = new THREE.Mesh(planeGeometry, planeMaterial)
-      plane.receiveShadow = true // 开启阴影
-      plane.rotateX(Math.PI / 180 * -90)
-      scene.add(plane)
+      /**
+       * cannonjs内容创建
+       */
+      !(function () {
+        // 设置重力，m/s²
+        world.gravity.set(0, -169.82, 0);
 
-    })()
-
-
-
-    /**
-     * cannonjs内容创建
-     */
-    !(function () {
-      // 设置重力，m/s²
-      world.gravity.set(0, -169.82, 0);
-
-      // 创建材料
-      const defaultMaterial = new CANNON.Material('default')
-      const defalutContactMaterial = new CANNON.ContactMaterial( // 关联材料
-        defaultMaterial,
-        defaultMaterial,
-        {
+        // 创建材料
+        const defaultMaterial = new CANNON.Material("default");
+        const defalutContactMaterial = new CANNON.ContactMaterial(defaultMaterial, defaultMaterial, {
+          // 关联材料
           friction: 0.1, // 摩擦
           restitution: 0.1, // 弹性
-        }
-      )
-      world.addContactMaterial(defalutContactMaterial) // 添加
-
-
-      // 创建墙块
-      wall.blocks.forEach(threeMesh => {
-        var boxBody = new CANNON.Body({
-          mass: 10.001, // 质量
-          position: new CANNON.Vec3(threeMesh.position.x, threeMesh.position.y, threeMesh.position.z), // 位置
-          shape: new CANNON.Box(new CANNON.Vec3(threeMesh._length / 2, threeMesh._height / 2, threeMesh._thickness / 2)), // 形状
-          quaternion: new CANNON.Quaternion(threeMesh.quaternion.x, threeMesh.quaternion.y, threeMesh.quaternion.z, threeMesh.quaternion.w), // 姿态，四元数
-          material: defaultMaterial, // 材料
         });
-        boxBody.inertia = new CANNON.Vec3(0, 0, 0)
-        boxBody.sleepTimeLimit = 0.1
-        boxBody.sleepSpeedLimit = 0.1
-        boxBody.sleep() // 强制睡眠
-        threeMesh.cannon = boxBody // 挂载
-        world.addBody(boxBody); // 添加
+        world.addContactMaterial(defalutContactMaterial); // 添加
 
-      })
-
-      // 创建下落物
-      const timer1 = setInterval(() => {
-        const arr = drop.blocks.filter(threeMesh => !threeMesh.cannon)
-        if (arr.length == 0 && drop.blocks.length == drop.number) {
-          clearInterval(timer1)
-          return
-        }
-
-        arr.forEach(threeMesh => {
-          var body = new CANNON.Body({
-            mass: 111, // 质量kg
+        // 创建墙块
+        wall.blocks.forEach((threeMesh) => {
+          var boxBody = new CANNON.Body({
+            mass: 10.001, // 质量
             position: new CANNON.Vec3(threeMesh.position.x, threeMesh.position.y, threeMesh.position.z), // 位置
-            shape: threeMesh._type == 'box' ? new CANNON.Box(new CANNON.Vec3(drop.size / 2, drop.size / 2, drop.size / 2)) : new CANNON.Sphere(drop.size / 2), // 形状
-            quaternion: new CANNON.Quaternion(threeMesh.quaternion.x, threeMesh.quaternion.y, threeMesh.quaternion.z, threeMesh.quaternion.w),
+            shape: new CANNON.Box(new CANNON.Vec3(threeMesh._length / 2, threeMesh._height / 2, threeMesh._thickness / 2)), // 形状
+            quaternion: new CANNON.Quaternion(threeMesh.quaternion.x, threeMesh.quaternion.y, threeMesh.quaternion.z, threeMesh.quaternion.w), // 姿态，四元数
             material: defaultMaterial, // 材料
           });
-          threeMesh.cannon = body // 挂载
-          world.addBody(body); // 添加
-        })
-      }, 100)
+          boxBody.inertia = new CANNON.Vec3(0, 0, 0);
+          boxBody.sleepTimeLimit = 0.1;
+          boxBody.sleepSpeedLimit = 0.1;
+          boxBody.sleep(); // 强制睡眠
+          threeMesh.cannon = boxBody; // 挂载
+          world.addBody(boxBody); // 添加
+        });
 
-      /* 创建地面 */
-      const groundShape = new CANNON.Plane()
-      var groundBody = new CANNON.Body({
-        mass: 0,
-        material: defaultMaterial
+        // 创建下落物
+        const timer1 = setInterval(() => {
+          const arr = drop.blocks.filter((threeMesh) => !threeMesh.cannon);
+          if (arr.length == 0 && drop.blocks.length == drop.number) {
+            clearInterval(timer1);
+            return;
+          }
+
+          arr.forEach((threeMesh) => {
+            var body = new CANNON.Body({
+              mass: 111, // 质量kg
+              position: new CANNON.Vec3(threeMesh.position.x, threeMesh.position.y, threeMesh.position.z), // 位置
+              shape: threeMesh._type == "box" ? new CANNON.Box(new CANNON.Vec3(drop.size / 2, drop.size / 2, drop.size / 2)) : new CANNON.Sphere(drop.size / 2), // 形状
+              quaternion: new CANNON.Quaternion(threeMesh.quaternion.x, threeMesh.quaternion.y, threeMesh.quaternion.z, threeMesh.quaternion.w),
+              material: defaultMaterial, // 材料
+            });
+            threeMesh.cannon = body; // 挂载
+            world.addBody(body); // 添加
+          });
+        }, 100);
+
+        /* 创建地面 */
+        const groundShape = new CANNON.Plane();
+        var groundBody = new CANNON.Body({
+          mass: 0,
+          material: defaultMaterial,
+        });
+        groundBody.addShape(groundShape);
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(-1, 0, 0), Math.PI * 0.5);
+        world.addBody(groundBody); // 添加
+      })();
+    })();
+
+    // 实时更新
+    let startTime = Date.now();
+    let lastTime = Date.now();
+    (function update(time) {
+      requestAnimationFrame(update);
+      const dt = Date.now() - lastTime;
+      if (dt <= 0) return;
+      world.step(dt / 1000); // cannonjs更新
+      lastTime += dt;
+
+      // threejs更新
+      const arr = [...wall.blocks, ...drop.blocks];
+      arr.forEach((threeMesh) => {
+        if (!threeMesh.cannon) return;
+        threeMesh.position.copy(threeMesh.cannon.position);
+        threeMesh.quaternion.copy(threeMesh.cannon.quaternion);
+        threeMesh.updateMatrix();
       });
-      groundBody.addShape(groundShape);
-      groundBody.quaternion.setFromAxisAngle(
-        new CANNON.Vec3(-1, 0, 0),
-        Math.PI * 0.5
-      )
-      world.addBody(groundBody); // 添加
-
-    })()
-
-  })()
-
-
-
-
-  // 实时更新
-  let startTime = Date.now();
-  let lastTime = Date.now();
-  (function update(time) {
-    requestAnimationFrame(update);
-    const dt = Date.now() - lastTime
-    if (dt <= 0) return
-    world.step(dt / 1000); // cannonjs更新
-    lastTime += dt
-
-
-    // threejs更新
-    const arr = [...wall.blocks, ...drop.blocks]
-    arr.forEach(threeMesh => {
-      if (!threeMesh.cannon) return
-      threeMesh.position.copy(threeMesh.cannon.position)
-      threeMesh.quaternion.copy(threeMesh.cannon.quaternion)
-      threeMesh.updateMatrix()
-    })
-    controls.update() // Update controls
-    renderer.render(scene, camera);// 渲染场景
-  })();
-</script>
-
+      controls.update(); // Update controls
+      renderer.render(scene, camera); // 渲染场景
+    })();
+  </script>
 </html>
