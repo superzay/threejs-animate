@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+      canvas {
+        width: 200vh;
+        height: 200vw;
+        transform: scale(0.5);
+        transform-origin: 0 0;
+      }
+    </style>
+  </head>
+
+  <body>
+    <script type="module">
+      import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+      import { GLTFLoader } from "https://cdn.skypack.dev/three@v0.129.0/examples//jsm/loaders/GLTFLoader.js";
+      import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+      import { OBB } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/math/OBB.js";
+      import * as CANNON from "http://182.43.179.137:81/public/cannon-es/cannon-es-0.19.0.js";
+
+      // 创建cannonjs世界坐标系
+      let world, defaultMaterial;
+      !(() => {
+        world = new CANNON.World();
+        world.gravity.set(0, -9.8, 0); // 重力
+
+        // 材料
+        defaultMaterial = new CANNON.Material("default");
+        const defalutContactMaterial = new CANNON.ContactMaterial(defaultMaterial, defaultMaterial, {
+          // 关联材料
+          friction: 0, // 摩擦
+          restitution: 0, // 弹性
+        });
+        world.addContactMaterial(defalutContactMaterial); // 添加
+
+        // 更新
+        const clock = new THREE.Clock();
+        !(function update(time) {
+          requestAnimationFrame(update);
+          const dt = clock.getDelta();
+          dt > 0 && world.step(dt);
+        })();
+      })();
+
+      // 创建渲染器
+      var renderer = new THREE.WebGLRenderer();
+      renderer.setSize(window.innerWidth * 2, window.innerHeight * 2); // 设置canvas画布大小
+      document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+      // 创建场景
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color("#347897");
+
+      // 辅助线
+      var axisHelper = new THREE.AxisHelper(500);
+      scene.add(axisHelper);
+
+      // 添加点光源
+      let light1 = new THREE.PointLight("#fff", 1.3);
+      light1.position.set(10000, 2160, -22160);
+      scene.add(light1);
+      let light2 = new THREE.PointLight("#fff", 1.3);
+      light2.position.set(-10000, 2160, 22160);
+      scene.add(light2);
+
+      //环境光
+      let ambient = new THREE.AmbientLight("#fff", 1);
+      scene.add(ambient);
+
+      // 创建相机
+      var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
+      camera.position.set(100, 600, -750); // 设置相机位置
+
+      // 创建控制器
+      let controls = new OrbitControls(camera, renderer.domElement);
+      controls.autoRotate = true;
+
+      // 渲染
+      requestAnimationFrame(function render() {
+        controls.update(); // Update controls
+        renderer.render(scene, camera);
+        requestAnimationFrame(render);
+      });
+
+      // 收集可在其上行走的物体
+      const arr = [];
+
+      // 创建地面，几何体，材质
+      let plane;
+      !(() => {
+        const length = 3000;
+        const width = 3000;
+        const texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-wood2.jpg"); // 立方纹理加载器
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(10, 10);
+        var geometry = new THREE.PlaneGeometry(length, width); // 平面几何体
+        var material = new THREE.MeshPhongMaterial({ map: texture, side: THREE.DoubleSide });
+        plane = new THREE.Mesh(geometry, material); // 创建模型
+        plane.rotateX((Math.PI / 180) * 90);
+        plane.name = "plane";
+        scene.add(plane); // 加入场景
+        arr.push(plane);
+
+        // cannonjs模拟地面
+        var groundBody = new CANNON.Body({
+          mass: 0, // 质量
+          material: defaultMaterial,
+          shape: new CANNON.Plane(), // 形状
+        });
+        // 旋转90度
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(-1, 0, 0), Math.PI * 0.5);
+        world.addBody(groundBody); // 地面添加进物理世界
+        groundBody.name = "plane";
+      })();
+
+      // 箱子，几何体，材质
+      let box;
+      !(() => {
+        const length = 1000;
+        const height = 100;
+        const width = 1000;
+        const position = [0, height / 2, 0];
+        var boxGeometry = new THREE.BoxGeometry(length, height, width); // 平面几何体
+        const texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-stone5.jpg"); // 立方纹理加载器
+        var boxMaterial = new THREE.MeshStandardMaterial({ color: "#777887", map: texture, side: THREE.DoubleSide });
+        box = new THREE.Mesh(boxGeometry, boxMaterial); // 创建模型
+        box.position.set(...position);
+        box.name = "box";
+        box._height = height;
+        scene.add(box); // 加入场景
+        arr.push(box);
+
+        // cannonjs模拟箱子
+        var body = new CANNON.Body({
+          mass: 0, // 质量
+          position: new CANNON.Vec3(...position), // 位置
+          shape: new CANNON.Box(new CANNON.Vec3(length / 2, height / 2, width / 2)), // 形状
+          quaternion: new CANNON.Quaternion(0, 0, 0, 1),
+          material: defaultMaterial, // 添加材料
+        });
+        body.name = "box";
+        world.addBody(body); // 添加到world
+      })();
+
+      // 箱子1，几何体，材质
+      let box1;
+      !(() => {
+        const length = 420;
+        const height = 100;
+        const width = 420;
+        const position = [0, height / 2 + 100, 0];
+        var boxGeometry = new THREE.BoxGeometry(length, height, width); // 平面几何体
+        const texture = new THREE.TextureLoader().load("http://182.43.179.137:81/public/images/texture-stone3.jpg"); // 立方纹理加载器
+        var boxMaterial = new THREE.MeshStandardMaterial({ color: "#999", map: texture, side: THREE.DoubleSide });
+        box1 = new THREE.Mesh(boxGeometry, boxMaterial); // 创建模型
+        box1.position.set(...position);
+        box1.name = "box1";
+        box1._height = height;
+        scene.add(box1); // 加入场景
+        arr.push(box1);
+
+        // cannonjs模拟箱子
+        var body = new CANNON.Body({
+          mass: 0, // 质量
+          position: new CANNON.Vec3(...position), // 位置
+          shape: new CANNON.Box(new CANNON.Vec3(length / 2, height / 2, width / 2)), // 形状
+          quaternion: new CANNON.Quaternion(0, 0, 0, 1),
+          material: defaultMaterial, // 添加材料
+        });
+        body.name = "box1";
+        world.addBody(body); // 添加到world
+      })();
+
+      // 加载gltf模型
+      let gltfModel;
+      new GLTFLoader().load("http://182.43.179.137:81/public/3d-models/Soldier.glb", function (gltf) {
+        gltfModel = gltf.scene;
+        gltfModel.children[0].scale.set(1, 1, 1); // 修正缩放
+        gltfModel._size = { length: 100, height: 182, width: 20 };
+
+        // 修正姿态
+        gltfModel.children[0].position.add(new THREE.Vector3(0, -gltfModel._size.height / 2, 0));
+        gltfModel.children[0].applyMatrix4(new THREE.Matrix4().makeRotationY((Math.PI / 180) * -180));
+        gltfModel.position.add(new THREE.Vector3(0, gltfModel._size.height / 2 + 200, 0));
+        gltfModel.rotateY((Math.PI / 180) * 90);
+        gltfModel.updateMatrix();
+        scene.add(gltfModel); // 加入场景
+
+        // 动画处理
+        const animations = gltf.animations;
+        let mixer = new THREE.AnimationMixer(gltfModel);
+        const idleClip = animations[0];
+        const runClip = animations[1];
+        const walkClip = animations[3]; // 散步帧
+        gltfModel.idleAction = mixer.clipAction(idleClip); // 空闲
+        gltfModel.idleAction.timeScale = 2; // 2倍速播放
+        gltfModel.runAction = mixer.clipAction(runClip); // 跑步
+        gltfModel.walkAction = mixer.clipAction(walkClip); // 散步
+        gltfModel.walkAction.timeScale = 2; // 3倍速播放
+        gltfModel.idleAction.play(); // 开启空闲
+
+        // 更新混合器
+        var clock = new THREE.Clock();
+        setInterval(() => {
+          mixer.update(clock.getDelta());
+        }, 50);
+
+        // 模型移动
+        gltfModel.walk = function (destination) {
+          gltfModel.walkData = {
+            speed: 350, // 速度
+            originPos: gltfModel.position.clone(), // 老位置
+            cameraOriginPos: camera.position.clone(), // 老位置
+            destination, // 目标位置
+            vector: new THREE.Vector3(destination.x - gltfModel.position.x, 0, destination.z - gltfModel.position.z), // 移动向量
+            distance: new THREE.Vector3(destination.x - gltfModel.position.x, 0, destination.z - gltfModel.position.z).length(), // 距离
+            state: "walk", // 状态，walk，upStage上台阶，downState下台阶
+          };
+
+          // cannonjs模拟gltfModel对象
+          const position = gltfModel.position.clone();
+          const quaternion = gltfModel.quaternion;
+          const size = gltfModel._size;
+          var body = new CANNON.Body({
+            mass: 1, // 质量
+            position: new CANNON.Vec3(position.x, position.y, position.z), // 位置
+            shape: new CANNON.Box(new CANNON.Vec3(size.length / 2, size.height / 2, size.width / 2)), // 形状
+            quaternion: new CANNON.Quaternion(quaternion.x, quaternion.y, quaternion.z, quaternion.w),
+            material: defaultMaterial, // 添加材料
+            velocity: new CANNON.Vec3(0, 0, 0),
+          });
+          body.name = "gltf";
+          body.fixedRotation = true; // 旋转约束
+          body.updateMassProperties(); // 旋转约束
+          gltfModel.walkData.cannon = body;
+
+          const { speed, originPos, cameraOriginPos, vector, distance } = gltfModel.walkData; // 提取数据
+
+          // 修正方向
+          !(function () {
+            const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), vector.clone().normalize());
+            gltfModel.quaternion.copy(quaternion);
+            gltfModel.updateMatrix();
+            body.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+          })();
+
+          // 位置矫正
+          body.position.set(originPos.x, originPos.y, originPos.z);
+
+          // 速度
+          const speedVector = vector.clone().normalize().setLength(speed);
+          body.velocity = new CANNON.Vec3(speedVector.x, speedVector.y, speedVector.z);
+
+          // 切换动画
+          gltfModel.walkAction.play();
+          gltfModel.idleAction.stop();
+
+          // 添加
+          world.addBody(body);
+
+          // 更新gltf模型
+          gltfModel.walkData.refreshFrameId = requestAnimationFrame(function h() {
+            if (!gltfModel.walkData) return;
+            gltfModel.walkData.refreshFrameId = requestAnimationFrame(h);
+            if (world.bodies.find((item) => item.name == "gltf")) {
+              const position = body.position; // 位置
+              const quaternion = body.quaternion; // 旋转和缩放四元数
+              gltfModel.position.set(position.x, position.y, position.z);
+              gltfModel.quaternion.set(quaternion.x, quaternion.y, quaternion.z, quaternion.w);
+              camera.position.copy(cameraOriginPos.clone().add(gltfModel.position.clone().sub(originPos.clone())));
+              controls.target.copy(gltfModel.position); // 控制器更新
+            }
+          });
+
+          // 上下台阶
+          gltfModel.walkData.watchFrameId = requestAnimationFrame(function h1() {
+            if (!gltfModel.walkData) return;
+            gltfModel.walkData.watchFrameId = requestAnimationFrame(h1);
+            // 上台阶
+            gltfModel.walk_upStage();
+
+            // 下台阶
+            gltfModel.walk_downStage();
+          });
+
+          // 清定时器
+          gltfModel.walkData.timer = setTimeout(() => {
+            gltfModel.walk_over(destination, cameraOriginPos, vector);
+          }, (distance / speed) * 1000);
+        };
+
+        // 上台阶
+        gltfModel.walk_upStage = function () {
+          const { state, cannon: body, vector, speed } = gltfModel.walkData;
+          const speedVector = vector.clone().normalize().setLength(speed);
+          if (state !== "walk") return;
+
+          // 碰撞检测，采样200+个点
+          let collisionArr = []; // 碰撞对象数组
+          const originArr = []; // 点数组
+          const { length, height, width } = gltfModel._size;
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(-length / 2, height / 2, width / 2), new THREE.Vector3(length / 2, height / 2, width / 2)).getPoints(50));
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(length / 2, height / 2, width / 2), new THREE.Vector3(length / 2, -height / 2, width / 2)).getPoints(50));
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(length / 2, -height / 2, width / 2), new THREE.Vector3(-length / 2, -height / 2, width / 2)).getPoints(50));
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(-length / 2, -height / 2, width / 2), new THREE.Vector3(-length / 2, height / 2, width / 2)).getPoints(50));
+          originArr.forEach((origin) => {
+            const origin_t = origin.applyMatrix4(gltfModel.matrix).add(vector.clone().normalize().multiplyScalar(-2)).add(new THREE.Vector3(0, 2, 0));
+            let raycaster = new THREE.Raycaster(origin_t, vector.clone().normalize(), 0.1, 100000);
+            let intersects = raycaster.intersectObjects(arr);
+            intersects[0] && collisionArr.push(intersects[0]);
+          });
+
+          // 最小距离
+          collisionArr = collisionArr
+            .map((item) => {
+              item.distance -= 2;
+              return item;
+            })
+            .filter((item) => {
+              return item.distance >= 0;
+            })
+            .sort((item2, item1) => {
+              if (item1.distance <= item2.distance) return 1;
+              if (item1.distance > item2.distance) return -1;
+            });
+          if (!collisionArr.length) return;
+
+          if (collisionArr[0].distance < 10) {
+            gltfModel.walkData.state = "upStage";
+            collisionFilterMask: 2 ** 1123; // 碰撞过滤
+            body.avoidRepeat = true;
+            body.sleep(); // 立即睡眠
+            // 修正速度和位置
+            const { x, y, z } = speedVector;
+            body.velocity = new CANNON.Vec3(x, y, z);
+
+            // 上台阶
+            const { x: x1, y: y1, z: z1 } = gltfModel.position;
+            const _vector = vector
+              .clone()
+              .normalize()
+              .multiplyScalar(collisionArr[0].distance + 1);
+            const position = [x1 + _vector.x, y1 + collisionArr[0].object._height, z1 + _vector.z]; // 高度上到台阶上面，然后位置稍微往前挪1个单位的距离
+            body.position.set(...position);
+            gltfModel.position.set(...position);
+
+            // 结束
+            gltfModel.walkData.upStage_timer = setTimeout(() => {
+              if (!gltfModel.walkData) return;
+              // 唤醒睡眠
+              body.applyImpulse(new CANNON.Vec3(0.0001, 0.0001, 0.0001));
+              collisionFilterMask: -1; // 碰撞过滤恢复
+              body.avoidRepeat = false; // 防重复字段，重置
+              gltfModel.walkData.state = "walk";
+            }, 50);
+          }
+        };
+
+        // 下台阶
+        gltfModel.walk_downStage = function () {
+          const { state, cannon: body, vector, speed } = gltfModel.walkData;
+          const speedVector = vector.clone().normalize().setLength(speed);
+          if (state !== "walk") return;
+
+          // 碰撞检测，采样200+个点
+          const distanceArr = []; // 距离数组
+          const originArr = []; // 点数组
+          const { length, height, width } = gltfModel._size;
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(-length / 2, -height / 2, -width / 2), new THREE.Vector3(length / 2, -height / 2, -width / 2)).getPoints(50));
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(length / 2, -height / 2, -width / 2), new THREE.Vector3(length / 2, -height / 2, width / 2)).getPoints(50));
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(length / 2, -height / 2, width / 2), new THREE.Vector3(-length / 2, -height / 2, width / 2)).getPoints(50));
+          originArr.push(...new THREE.LineCurve3(new THREE.Vector3(-length / 2, -height / 2, width / 2), new THREE.Vector3(-length / 2, -height / 2, -width / 2)).getPoints(50));
+          originArr.forEach((origin) => {
+            const origin_t = origin.applyMatrix4(gltfModel.matrix).add(new THREE.Vector3(0, 2, 0));
+            let raycaster = new THREE.Raycaster(origin_t, new THREE.Vector3(0, -1, 0), 0.1, 100000);
+            let intersects = raycaster.intersectObjects(arr);
+            distanceArr.push(intersects[0]?.distance || 0);
+          });
+
+          // 最小距离
+          const minDistance = Math.min(...distanceArr) - 2;
+          if (minDistance > 5) {
+            gltfModel.walkData.state = "downStage";
+            collisionFilterMask: 2 ** 1123; // 碰撞过滤
+            body.avoidRepeat = true;
+            body.sleep(); // 立即睡眠
+
+            // 修正速度和位置
+            const { x, y, z } = speedVector;
+            body.velocity = new CANNON.Vec3(x, y, z);
+
+            // 下台阶
+            const { x: x1, y: y1, z: z1 } = gltfModel.position;
+            const _vector = vector.clone().normalize();
+            const position = [x1 + _vector.x, y1 - minDistance, z1 + _vector.z];
+            body.position.set(...position);
+            gltfModel.position.set(...position);
+
+            // 结束
+            gltfModel.walkData.downStage_timer = setTimeout(() => {
+              if (!gltfModel.walkData) return;
+              // 唤醒睡眠
+              body.applyImpulse(new CANNON.Vec3(0.0001, 0.0001, 0.0001));
+              collisionFilterMask: -1; // 碰撞过滤恢复
+              body.avoidRepeat = false; // 防重复字段，重置
+              gltfModel.walkData.state = "walk";
+            }, 50);
+          }
+        };
+
+        // 结束移动
+        gltfModel.walk_over = function (destination, cameraOriginPos, moveVector) {
+          gltfModel.position.set(destination.x, destination.y, destination.z);
+          camera.position.copy(cameraOriginPos.clone().add(moveVector));
+          controls.target.copy(destination);
+          gltfModel.idleAction.play();
+          gltfModel.walkAction.stop();
+
+          // 清理定时器
+          gltfModel.walkData?.timer && clearTimeout(gltfModel.walkData.timer);
+          gltfModel.walkData.downStage_timer && clearTimeout(gltfModel.walkData.downStage_timer);
+          gltfModel.walkData.upStage_timer && clearTimeout(gltfModel.walkData.upStage_timer);
+          gltfModel.walkData.refreshFrameId && cancelAnimationFrame(gltfModel.walkData.refreshFrameId);
+          gltfModel.walkData.watchFrameId && cancelAnimationFrame(gltfModel.walkData.watchFrameId);
+
+          // 移除数据
+          gltfModel.walkData?.cannon && world.removeBody(gltfModel.walkData.cannon);
+          gltfModel.walkData = null;
+        };
+      });
+
+      // 点击地面，移动模型
+      !(function () {
+        let initPos = null;
+
+        // 初始位置
+        renderer.domElement.addEventListener("pointerdown", function (event) {
+          event = event || window.event;
+          initPos = {
+            x: event.clientX,
+            y: event.clientY,
+          };
+        });
+
+        // 监听pointerup
+        renderer.domElement.addEventListener("pointerup", function (event) {
+          event = event || window.event;
+          // 鼠标位移超过2像素，视为移动，不触发pointerup事件
+          if (!initPos || Math.abs(initPos.x - event.clientX) > 2 || Math.abs(initPos.y - event.clientY) > 2) return;
+          initPos = null;
+
+          // 触点坐标
+          let x = event.clientX - renderer.domElement.getBoundingClientRect().left;
+          let y = event.clientY - renderer.domElement.getBoundingClientRect().top;
+          let canvasWidth = renderer.domElement.clientWidth; // canvas画布宽度
+          let canvasHeight = renderer.domElement.clientHeight; // canvas画布高度
+
+          // 归一化
+          var sx = -1 + ((x * 2) / canvasWidth) * 2;
+          var sy = 1 - ((y * 2) / canvasHeight) * 2;
+
+          // 射线投射器
+          var raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(new THREE.Vector2(sx, sy), camera);
+
+          // 碰撞检测
+          var intersects = raycaster.intersectObjects(arr);
+
+          // 拾取成功
+          if (intersects.length > 0) {
+            controls.autoRotate = false; // 关掉控制器自动旋转
+
+            // 清理上一次移动
+            if (gltfModel.walkData) {
+              const currPos = gltfModel.position.clone();
+              const { cameraOriginPos, originPos } = gltfModel.walkData;
+              gltfModel.walk_over(currPos, cameraOriginPos, currPos.clone().sub(originPos));
+            }
+
+            // 开启新移动
+            const { x, y, z } = intersects[0].point; // 目标位置
+            const dest = new THREE.Vector3(x, y + gltfModel._size.height / 2, z);
+            gltfModel.walk(dest);
+          }
+        });
+      })();
+
+      setTimeout(() => {
+        controls.autoRotate = false; // 关掉控制器自动旋转
+
+        // 清理上一次移动
+        if (gltfModel.walkData) {
+          const currPos = gltfModel.position.clone();
+          const { cameraOriginPos, originPos } = gltfModel.walkData;
+          gltfModel.walk_over(currPos, cameraOriginPos, currPos.clone().sub(originPos));
+        }
+
+        // 开启新移动
+        const dest = new THREE.Vector3(900, 0 + gltfModel._size.height / 2, -700);
+        gltfModel.walk(dest);
+      }, 3000);
+
+      setTimeout(() => {
+        // 清理上一次移动
+        if (gltfModel.walkData) {
+          const currPos = gltfModel.position.clone();
+          const { cameraOriginPos, originPos } = gltfModel.walkData;
+          gltfModel.walk_over(currPos, cameraOriginPos, currPos.clone().sub(originPos));
+        }
+
+        // 开启新移动
+        const dest = new THREE.Vector3(0, 0 + gltfModel._size.height / 2, -700);
+        gltfModel.walk(dest);
+      }, 7000);
+
+      setTimeout(() => {
+        // 清理上一次移动
+        if (gltfModel.walkData) {
+          const currPos = gltfModel.position.clone();
+          const { cameraOriginPos, originPos } = gltfModel.walkData;
+          gltfModel.walk_over(currPos, cameraOriginPos, currPos.clone().sub(originPos));
+        }
+
+        // 开启新移动
+        const dest = new THREE.Vector3(0, 200 + gltfModel._size.height / 2, 0);
+        gltfModel.walk(dest);
+      }, 9000);
+
+      setTimeout(() => {
+        // 清理上一次移动
+        if (gltfModel.walkData) {
+          const currPos = gltfModel.position.clone();
+          const { cameraOriginPos, originPos } = gltfModel.walkData;
+          gltfModel.walk_over(currPos, cameraOriginPos, currPos.clone().sub(originPos));
+        }
+
+        // 开启新移动
+        const dest = new THREE.Vector3(0, 200 + gltfModel._size.height / 2, -50);
+        gltfModel.walk(dest);
+      }, 12000);
+    </script>
+  </body>
+</html>
