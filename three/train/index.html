@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>threejs</title>
+    <meta http-equiv="content-type" content="text/html;charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=2,maximum-scale=1,user-scalable=yes" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+
+    <style>
+      html,
+      body {
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+        background: #347897;
+      }
+      canvas {
+        width: 200vh;
+        height: 200vw;
+        transform: scale(0.5);
+        transform-origin: 0 0;
+      }
+
+      .operate {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        opacity: 0.6;
+        z-index: 1000;
+        width: 200px;
+      }
+
+      .button {
+        width: 100px;
+        margin: 10px 0;
+        padding: 5px 0;
+        text-align: center;
+        font-size: 12px;
+        background: #fff;
+        border-radius: 10px;
+        color: rgb(248, 148, 9);
+        cursor: pointer;
+        font-weight: bold;
+      }
+
+      .text {
+        font-size: 13px;
+        color: rgb(199, 21, 9);
+        font-weight: bold;
+      }
+      .in .button_open,
+      .in .button_close,
+      .in .button_out {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .ined .button_in,
+      .ined .button_close {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .open .button_in,
+      .open .button_close,
+      .open .button_out {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .opened .button_in,
+      .opened .button_open,
+      .opened .button_out {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .close .button_in,
+      .close .button_open,
+      .close .button_out {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .closed .button_in,
+      .closed .button_close {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .out .button_open,
+      .out .button_close,
+      .out .button_in {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .outed .button_open,
+      .outed .button_close,
+      .outed .button_out {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+      .firstPreview .button_open,
+      .firstPreview .button_close,
+      .firstPreview .button_out,
+      .firstPreview .button_in {
+        opacity: 0.3;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="operate firstPreview">
+      <p class="text">前方开往-->中国药科大学</p>
+      <div class="button button_in">下一趟进站</div>
+      <div class="button button_open">地铁开门</div>
+      <div class="button button_close">地铁关门</div>
+      <div class="button button_out">地铁出站</div>
+    </div>
+
+    <script type="module">
+      //import * as THREE from "https://cdn.skypack.dev/three@v0.129.0";
+      //import { OrbitControls } from "https://cdn.skypack.dev/three@v0.129.0/examples/jsm/controls/OrbitControls.js";
+      import * as THREE from "http://182.43.179.137:81/threejs/train/three.module.js";
+      import { OrbitControls } from "http://182.43.179.137:81/threejs/train/OrbitControls.js";
+      import * as CANNON from "http://182.43.179.137:81/public/cannon-es/cannon-es-0.19.0.js";
+
+      /* demo主要用来提供思路，务求条理清晰、简单好理解，小伙伴们可自行优化 */
+
+      !(async function () {
+        const textureArr = [];
+        for (let i = 0; i < 24; i++) {
+          let url;
+          if (i <= 20) url = `http://182.43.179.137:81/public/images/texture-header${i == 0 ? "" : i}.png`;
+          if (i == 21) url = `http://182.43.179.137:81/public/images/texture-platform.jpg`;
+          if (i == 22) url = `http://182.43.179.137:81/public/images/texture-rail.jpg`;
+          if (i == 23) url = `http://182.43.179.137:81/public/images/texture-train.png`;
+          textureArr.push(
+            new Promise((resolve, reject) => {
+              new THREE.TextureLoader().load(url, function (texture) {
+                resolve(texture);
+              });
+            })
+          );
+        }
+
+        const textures = await Promise.all(textureArr);
+
+        // 创建cannonjs世界坐标系
+        let world, defaultMaterial, trainMaterial;
+        !(() => {
+          world = new CANNON.World();
+          world.gravity.set(0, -0.8, 0); // 重力
+
+          // 材料
+          defaultMaterial = new CANNON.Material("default");
+          trainMaterial = new CANNON.Material("trainMaterial");
+          const defalut_default_contactMaterial = new CANNON.ContactMaterial(defaultMaterial, defaultMaterial, {
+            friction: 0.005, // 摩擦
+            restitution: 0, // 弹性
+          });
+          const defalut_train_contactMaterial = new CANNON.ContactMaterial(defaultMaterial, trainMaterial, {
+            friction: 0,
+            restitution: 0,
+          });
+          world.addContactMaterial(defalut_default_contactMaterial); // 添加
+          world.addContactMaterial(defalut_train_contactMaterial);
+
+          // 创建地面
+          world.addBody(
+            new CANNON.Body({
+              mass: 0,
+              material: defaultMaterial,
+              shape: new CANNON.Plane(),
+              quaternion: new CANNON.Quaternion().setFromAxisAngle(new CANNON.Vec3(-1, 0, 0), Math.PI * 0.5), // 旋转90度
+            })
+          );
+
+          // 更新
+          let lastStart = Date.now();
+          requestAnimationFrame(function h() {
+            requestAnimationFrame(h);
+            const now = Date.now();
+            const dt = (now - lastStart) / 1000;
+            if (dt > 0) (lastStart = now), world.step(dt); // world更新，单位秒
+          });
+        })();
+
+        // 创建渲染器
+        var renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth * 2, window.innerHeight * 2); // 设置canvas画布大小
+        document.body.appendChild(renderer.domElement); // canvas画布插入dom树
+
+        // 创建场景
+        var scene = new THREE.Scene();
+        scene.background = new THREE.Color("#347897");
+
+        // 辅助线
+        var axisHelper = new THREE.AxisHelper(500);
+        //scene.add(axisHelper);
+
+        // 添加点光源
+        let light1 = new THREE.PointLight("#fff", 1.3);
+        light1.position.set(10000, 2160, -22160);
+        scene.add(light1);
+        let light2 = new THREE.PointLight("#fff", 1.3);
+        light2.position.set(-10000, 2160, 22160);
+        scene.add(light2);
+
+        //环境光
+        let ambient = new THREE.AmbientLight("#fff", 1);
+        scene.add(ambient);
+
+        // 创建相机
+        var camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 7000);
+        camera.position.set(0, 170, 35); // 设置相机位置
+
+        // 创建控制器
+        let controls = new OrbitControls(camera, renderer.domElement);
+        //controls.autoRotate = true;
+
+        // 渲染
+        requestAnimationFrame(function h() {
+          requestAnimationFrame(h);
+          controls.update(); // Update controls
+          renderer.render(scene, camera);
+        });
+
+        // 创建站台
+        let platform;
+        const width = 106; // 宽度
+        const thickness = 156; //厚度
+        const height = 200; // 高度
+        const bold = 2; // 面片厚度
+        !(() => {
+          var geometry = new THREE.PlaneGeometry(width, thickness); // 几何体
+          var material = new THREE.MeshBasicMaterial({ map: textures[21], side: THREE.DoubleSide });
+          platform = new THREE.Mesh(geometry, material);
+          platform.rotateX((Math.PI / 180) * 90);
+          scene.add(platform); // 加入场景
+
+          // 创建body，站台空间
+          const body = new CANNON.Body({
+            mass: 0, // 质量
+            material: defaultMaterial,
+            position: new CANNON.Vec3(0, 0, 0),
+          });
+          body.name = "platform";
+          // body添加形状
+          for (let i = 0; i < 7; i++) {
+            let shape; // 形状
+            switch (i) {
+              case 0:
+                // 底面
+                shape = new CANNON.Box(new CANNON.Vec3(width / 2, bold / 2, thickness / 2));
+                shape.name = "platform_bottom";
+                body.addShape(shape, new CANNON.Vec3(0, -bold / 2, 0)); // 添加形状，指定位置
+                break;
+              case 1:
+                // 上面
+                shape = new CANNON.Box(new CANNON.Vec3(width / 2, bold / 2, thickness / 2));
+                shape.name = "platform_top";
+                body.addShape(shape, new CANNON.Vec3(0, height, 0));
+                break;
+              case 2:
+                // 左面
+                shape = new CANNON.Box(new CANNON.Vec3(bold / 2, height / 2, thickness / 2));
+                shape.name = "platform_left";
+                body.addShape(shape, new CANNON.Vec3(-width / 2 + bold / 2, height / 2, 0));
+                break;
+              case 3:
+                // 右面，分成可开合的两块
+                shape = new CANNON.Box(new CANNON.Vec3(bold / 2, height / 2, thickness / 4));
+                shape.name = "platform_right1";
+                body.addShape(shape, new CANNON.Vec3(width / 2 - bold / 2, height / 2, -thickness / 4));
+                break;
+              case 4:
+                // 右面，分成可开合的两块
+                shape = new CANNON.Box(new CANNON.Vec3(bold / 2, height / 2, thickness / 4));
+                shape.name = "platform_right2";
+                body.addShape(shape, new CANNON.Vec3(width / 2 - bold / 2, height / 2, thickness / 4));
+                break;
+              case 5:
+                // 前面
+                shape = new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, bold / 2));
+                shape.name = "platform_before";
+                body.addShape(shape, new CANNON.Vec3(0, height / 2, thickness / 2 - bold / 2));
+                break;
+              case 6:
+                // 后面
+                shape = new CANNON.Box(new CANNON.Vec3(width / 2, height / 2, bold / 2));
+                shape.name = "platform_after";
+                body.addShape(shape, new CANNON.Vec3(0, height / 2, -thickness / 2 + bold / 2));
+                break;
+            }
+          }
+          world.addBody(body); // 添加进物理世界
+        })();
+
+        // 创建铁轨
+        let rail;
+        const r_width = 36; // 宽度
+        const r_length = 10000; // 长度
+        !(() => {
+          const texture = textures[22];
+          texture.wrapS = THREE.MirroredRepeatWrapping; // 镜像重复
+          texture.wrapT = THREE.MirroredRepeatWrapping;
+          texture.repeat.set(1, 500); // 平铺
+          var geometry = new THREE.PlaneGeometry(r_width, r_length);
+          var material = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+          rail = new THREE.Mesh(geometry, material); // 铁轨
+          rail.position.set(width / 2 + r_width / 2, 0, 0); // 平移
+          rail.rotateX((Math.PI / 180) * 90); // 旋转
+          scene.add(rail); // 加入场景
+        })();
+
+        // 创建列车
+        let train;
+        const t_width = r_width; // 宽度
+        const t_length = 200; // 长度
+        const t_thickness = 100; // 车厢厚度
+        const t_height = 50; // 高度
+        const t_positionY = 0.01; // y轴固定值
+        const t_initPos = [width / 2 + t_width / 2, t_positionY, 10000]; // 初始位置
+        const t_doorSize = 20; // 列车门尺寸
+        !(() => {
+          // 列车mesh
+          var geometry = new THREE.BoxGeometry(t_width, 0.01, t_length); // 几何体
+          var material = new THREE.MeshBasicMaterial({ map: textures[23], alphaTest: 0.1, side: THREE.DoubleSide });
+          train = new THREE.Mesh(geometry, material); // 列车
+          train.position.set(...t_initPos); // 位置
+          scene.add(train); // 加入场景
+
+          // 列车车门
+          for (let i = 0; i < 2; i++) {
+            var geometry = new THREE.BoxGeometry(2, 2, t_doorSize); // 几何体
+            var material = new THREE.MeshBasicMaterial({ color: "#A52A2A", side: THREE.DoubleSide });
+            const door = new THREE.Mesh(geometry, material); // 创建列车
+            door.position.set(-t_width / 2 + bold / 2, 1, i == 0 ? -t_doorSize / 2 : t_doorSize / 2); // 位置
+            door.name = i == 0 ? "door1" : "door2";
+            train.add(door); // 加入场景
+          }
+
+          // 创建cannonjs对象，车厢空间
+          const body = new CANNON.Body({
+            mass: 111111, // 质量
+            material: trainMaterial,
+            position: new CANNON.Vec3(...t_initPos), // 位置
+          });
+          body.name = "train";
+          // body添加形状
+          for (let i = 0; i < 7; i++) {
+            let shape; // 形状
+            switch (i) {
+              case 0:
+                // 底面
+                shape = new CANNON.Box(new CANNON.Vec3(t_width / 2, bold / 2, t_thickness / 2));
+                shape.name = "train_bottom";
+                body.addShape(shape, new CANNON.Vec3(0, -bold / 2, 0)); // 添加形状，指定位置
+                break;
+              case 1:
+                // 上面
+                shape = new CANNON.Box(new CANNON.Vec3(t_width / 2, bold / 2, t_thickness / 2));
+                shape.name = "train_top";
+                body.addShape(shape, new CANNON.Vec3(0, t_height, 0));
+                break;
+              case 2:
+                // 左面，分成可开合的两块
+                shape = new CANNON.Box(new CANNON.Vec3(bold / 2, t_height / 2, t_thickness / 4));
+                shape.name = "train_left1";
+                body.addShape(shape, new CANNON.Vec3(-t_width / 2 + bold / 2, t_height / 2, -t_thickness / 4));
+                break;
+              case 3:
+                // 左面，分成可开合的两块
+                shape = new CANNON.Box(new CANNON.Vec3(bold / 2, t_height / 2, t_thickness / 4));
+                shape.name = "train_left2";
+                body.addShape(shape, new CANNON.Vec3(-t_width / 2 + bold / 2, t_height / 2, t_thickness / 4));
+                break;
+              case 4:
+                // 右面
+                shape = new CANNON.Box(new CANNON.Vec3(bold / 2, t_height / 2, t_thickness / 2));
+                shape.name = "train_right";
+                body.addShape(shape, new CANNON.Vec3(t_width / 2 - bold / 2, t_height / 2, 0));
+                break;
+              case 5:
+                // 前面
+                shape = new CANNON.Box(new CANNON.Vec3(t_width / 2, t_height / 2, bold / 2));
+                shape.name = "train_before";
+                body.addShape(shape, new CANNON.Vec3(0, t_height / 2, t_thickness / 2 - bold / 2));
+                break;
+              case 6:
+                // 后面
+                shape = new CANNON.Box(new CANNON.Vec3(t_width / 2, t_height / 2, bold / 2)); // 形状，注意cannonjs创建box，尺寸取的是半径
+                shape.name = "train_after"; // 形状指定一个名称
+                body.addShape(shape, new CANNON.Vec3(0, t_height / 2, -t_thickness / 2 + bold / 2)); // 添加形状，指定在body坐标系下的位置
+                break;
+            }
+          }
+          world.addBody(body); // 添加进物理世界
+
+          // 实时更新，列车位置
+          requestAnimationFrame(function h() {
+            requestAnimationFrame(h);
+            let { x, y, z } = body.position;
+            // 锁定位置和姿态，
+            body.position.set(width / 2 + t_width / 2, 0, z);
+            body.quaternion.set(0, 0, 0, 1);
+            // 更新位置
+            train.position.set(width / 2 + t_width / 2, 0.1, z);
+          });
+
+          // 初始化数据
+          train.state = "init"; // state状态为：init,in,ined,open,opened,close,closed,out,outed
+          train.data = {
+            timeLength: 2000, // 进、出站时长
+            length: 500, // 进、出站距离
+            doorTimeLength: 500, // 开关车门时长
+            events: {}, // 事件容器，每种train.state状态都可以添加事件
+          };
+
+          // 事件注册
+          train.on = function (eventName, eventFn) {
+            const events = train.data.events;
+            const arr = (events[eventName] = events[eventName] || []);
+            if (!arr.includes(eventFn)) arr.push(eventFn);
+          };
+
+          // 事件触发
+          train.emit = function (eventName) {
+            const eventFn = train.data.events[eventName];
+            eventFn &&
+              eventFn.forEach((fn) => {
+                fn();
+              });
+          };
+
+          // 列车进站
+          train.in = function () {
+            const data = train.data;
+            const speed = data.length / (data.timeLength / 1000); // 速度
+            body.velocity.set(0, 0, -speed); // 设置
+            body.position.set(width / 2 + t_width / 2, 0, data.length); // 设置位置
+            train.state = "in"; // 状态
+            train.emit("in"); // 事件
+
+            // 进站完成
+            setTimeout(() => {
+              body.velocity.set(0, 0, 0); //速度置0
+              body.position.set(width / 2 + t_width / 2, 0, 0); // 位置修正
+              body.mass = 0; // 质量置为0，固定列车
+              body.updateMassProperties(); // 更新
+              train.state = "ined"; // 状态
+              train.emit("ined"); // 事件
+            }, data.timeLength);
+          };
+
+          // 列车开门
+          train.openDoor = function () {
+            train.state = "open"; // 状态
+            train.emit("open"); // 事件
+            const dl = train.data.doorTimeLength; // 开门时长
+            const start = Date.now(); // 起始时间
+
+            // 在cannonjs的world中查找platform和train，并找到下面的数据
+            let p1, p2, t1, t2, d1, d2;
+            world.bodies.forEach((body) => {
+              // 站台门
+              if (body.name == "platform") {
+                // 站台的cannon对象的右侧2个面
+                p1 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "platform_right1")] };
+                p2 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "platform_right2")] };
+                p1.init = { x: p1.obj.x, y: p1.obj.y, z: p1.obj.z };
+                p2.init = { x: p2.obj.x, y: p2.obj.y, z: p2.obj.z };
+              }
+
+              // 列车门
+              if (body.name == "train") {
+                // 列车的cannon对象的左侧2个面
+                t1 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "train_left1")] };
+                t2 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "train_left2")] };
+                t1.init = { x: t1.obj.x, y: t1.obj.y, z: t1.obj.z };
+                t2.init = { x: t2.obj.x, y: t2.obj.y, z: t2.obj.z };
+
+                // 列车的threejs车门
+                d1 = { obj: train.children.find((item) => item.name == "door1").position };
+                d2 = { obj: train.children.find((item) => item.name == "door2").position };
+                d1.init = { x: d1.obj.x, y: d1.obj.y, z: d1.obj.z };
+                d2.init = { x: d2.obj.x, y: d2.obj.y, z: d2.obj.z };
+              }
+            });
+
+            // 车门渐渐打开
+            let timer = setInterval(() => {
+              const dt = Date.now() - start;
+              p1.obj.set(p1.init.x, p1.init.y, p1.init.z - (t_doorSize * dt) / dl);
+              p2.obj.set(p2.init.x, p2.init.y, p2.init.z + (t_doorSize * dt) / dl);
+              t1.obj.set(t1.init.x, t1.init.y, t1.init.z - (t_doorSize * dt) / dl);
+              t2.obj.set(t2.init.x, t2.init.y, t2.init.z + (t_doorSize * dt) / dl);
+              d1.obj.set(d1.init.x, d1.init.y, d1.init.z - (t_doorSize * dt) / dl);
+              d2.obj.set(d2.init.x, d2.init.y, d2.init.z + (t_doorSize * dt) / dl);
+            }, 20);
+
+            // 打开完毕
+            setTimeout(() => {
+              // 清定定时器
+              clearInterval(timer);
+
+              // 修正关闭位置
+              p1.obj.set(p1.init.x, p1.init.y, p1.init.z - t_doorSize);
+              p2.obj.set(p2.init.x, p2.init.y, p2.init.z + t_doorSize);
+              t1.obj.set(t1.init.x, t1.init.y, t1.init.z - t_doorSize);
+              t2.obj.set(t2.init.x, t2.init.y, t2.init.z + t_doorSize);
+              d1.obj.set(d1.init.x, d1.init.y, d1.init.z - t_doorSize);
+              d2.obj.set(d2.init.x, d2.init.y, d2.init.z + t_doorSize);
+
+              // 状态和事件设置
+              train.state = "opened";
+              train.emit("opened");
+            }, dl);
+          };
+
+          // 列车关门
+          train.closeDoor = function () {
+            train.state = "close"; // 状态
+            train.emit("close"); // 事件
+            const dl = train.data.doorTimeLength; // 开门时长
+            const start = Date.now(); //起始时间
+
+            // 在cannonjs的world中查找platform和train，并找到下面的数据
+            let p1, p2, t1, t2, d1, d2;
+            world.bodies.forEach((body) => {
+              // 站台门
+              if (body.name == "platform") {
+                // 站台的cannon对象的右侧2个面
+                p1 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "platform_right1")] };
+                p2 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "platform_right2")] };
+                p1.init = { x: p1.obj.x, y: p1.obj.y, z: p1.obj.z };
+                p2.init = { x: p2.obj.x, y: p2.obj.y, z: p2.obj.z };
+              }
+
+              // 列车门
+              if (body.name == "train") {
+                // 列车的cannon对象的左侧2个面
+                t1 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "train_left1")] };
+                t2 = { obj: body.shapeOffsets[body.shapes.findIndex((item) => item.name == "train_left2")] };
+                t1.init = { x: t1.obj.x, y: t1.obj.y, z: t1.obj.z };
+                t2.init = { x: t2.obj.x, y: t2.obj.y, z: t2.obj.z };
+
+                // 列车的threejs车门
+                d1 = { obj: train.children.find((item) => item.name == "door1").position };
+                d2 = { obj: train.children.find((item) => item.name == "door2").position };
+                d1.init = { x: d1.obj.x, y: d1.obj.y, z: d1.obj.z };
+                d2.init = { x: d2.obj.x, y: d2.obj.y, z: d2.obj.z };
+              }
+            });
+
+            // 车门渐渐关闭
+            let timer = setInterval(() => {
+              const dt = Date.now() - start;
+              p1.obj.set(p1.init.x, p1.init.y, p1.init.z + (t_doorSize * dt) / dl);
+              p2.obj.set(p2.init.x, p2.init.y, p2.init.z - (t_doorSize * dt) / dl);
+              t1.obj.set(t1.init.x, t1.init.y, t1.init.z + (t_doorSize * dt) / dl);
+              t2.obj.set(t2.init.x, t2.init.y, t2.init.z - (t_doorSize * dt) / dl);
+              d1.obj.set(d1.init.x, d1.init.y, d1.init.z + (t_doorSize * dt) / dl);
+              d2.obj.set(d2.init.x, d2.init.y, d2.init.z - (t_doorSize * dt) / dl);
+            }, 20);
+
+            // 关闭完成
+            setTimeout(() => {
+              // 清定定时器
+              clearInterval(timer);
+
+              // 修正关闭位置
+              p1.obj.set(p1.init.x, p1.init.y, p1.init.z + t_doorSize);
+              p2.obj.set(p2.init.x, p2.init.y, p2.init.z - t_doorSize);
+              t1.obj.set(t1.init.x, t1.init.y, t1.init.z + t_doorSize);
+              t2.obj.set(t2.init.x, t2.init.y, t2.init.z - t_doorSize);
+              d1.obj.set(d1.init.x, d1.init.y, d1.init.z + t_doorSize);
+              d2.obj.set(d2.init.x, d2.init.y, d2.init.z - t_doorSize);
+
+              // 状态和事件设置
+              train.state = "closed";
+              train.emit("closed");
+            }, dl);
+          };
+
+          // 列车出站
+          train.out = function () {
+            const data = train.data;
+            const speed = data.length / (data.timeLength / 1000); // 速度
+            body.mass = 111111; // 质量
+            body.updateMassProperties(); // 更新
+            body.velocity.set(0, 0, -speed); // 设置速度
+            // 速度补偿
+            world.bodies.forEach((body) => {
+              if (body.name == "people" && body.area == "train") {
+                body.velocity.set(0, 0, -speed);
+              }
+            });
+            train.state = "out"; // 状态
+            train.emit("out"); // 事件
+
+            // 出站结束
+            setTimeout(() => {
+              body.velocity.set(0, 0, 0); // 速度置0
+              // 清数据
+              world.bodies
+                .filter((body) => body.name == "people" && body.area == "train")
+                .forEach((body) => {
+                  world.removeBody(body); // 清理cannonjs
+                  scene.remove(body.threeParent); // 清threejs
+                  arr = arr.filter((people) => people != body.threeParent); // 清arr
+                });
+              train.state = "outed"; // 状态
+              train.emit("outed"); // 事件
+            }, data.timeLength);
+          };
+        })();
+
+        // 创建乘客
+        let arr = [];
+        const r1 = 5; // 圆柱顶部半径，用圆饼表示乘客
+        const r2 = 5; // 底部半径
+        const h = 2; // 高度
+        function createPeople() {
+          // 乘客mesh
+          const position = [-width / 2 + bold + (Math.random() * width) / 3 + r1, h / 2, -thickness / 2 + bold + r1]; // 初始位置;
+          var geometry = new THREE.CylinderGeometry(r1, r2, h, 32);
+          var material = new THREE.MeshStandardMaterial({ color: "#bbb", side: THREE.DoubleSide });
+          let people = new THREE.Mesh(geometry, material);
+          people.position.set(...position);
+          people.a = arr.length;
+          scene.add(people); // 加入场景
+
+          // 头像
+          var circleGeometry = new THREE.CircleGeometry(r1, 100);
+          let random = Math.floor(Math.random() * 21);
+          const circleTexture = textures[random];
+          var circleMaterial = new THREE.MeshStandardMaterial({ color: "#ccc", map: circleTexture, side: THREE.DoubleSide });
+          let circle = new THREE.Mesh(circleGeometry, circleMaterial);
+          circle.position.set(0, h / 2 + 0.1, 0);
+          circle.rotateX(-Math.PI / 2);
+          people.add(circle); // 加入场景
+
+          // cannonjs模拟乘客
+          var body = new CANNON.Body({
+            mass: 1, // 质量
+            position: new CANNON.Vec3(...position), // 位置
+            shape: new CANNON.Cylinder(r1, r2, h), // 形状
+            material: defaultMaterial, // 材料
+          });
+          body.name = "people";
+          body.area = "platform"; // 区域:站台、列车
+          body.threeParent = people;
+          body.fixedRotation = true; // 旋转约束
+          body.updateMassProperties(); // 旋转约束
+          body.applyImpulse(new CANNON.Vec3(Math.random() * 15 + 10, 0, Math.random() * 15 + 10)); // 冲量力
+          world.addBody(body); // 添加到world
+
+          arr.push(people);
+        }
+
+        // 创建100个乘客
+        const peopleNum = 100;
+        let timer = setInterval(() => {
+          if (arr.length >= peopleNum) clearInterval(timer);
+          createPeople();
+        }, 50);
+
+        // 实时更新乘客位置
+        requestAnimationFrame(function hh() {
+          requestAnimationFrame(hh);
+          // 遍历world找出people
+          world.bodies.forEach((body) => {
+            if (body.name !== "people") return;
+            let { x, y, z } = body.position; // 位置
+            const v = body.velocity; // 速度
+            body.position.set(x, h / 2, z); // 更新
+            body.quaternion.set(0, 0, 0, 1); // 姿态，四元数
+            body.velocity.set(v.x, 0, v.z); // 速度
+
+            // 更新threejs对象的位置
+            body.threeParent.position.set(x, h / 2 + 0.1, z);
+
+            // 在站台内
+            const redundancy = 5; // 冗余量
+            function inPlatform(body) {
+              const { x, y, z } = body.position;
+              if (x > width / 2 + redundancy || x < -width / 2 - redundancy || z > thickness / 2 + redundancy || z < -thickness / 2 - redundancy) {
+                return false;
+              } else {
+                return true;
+              }
+            }
+
+            // 在列车内
+            function inTrain(body) {
+              const { x, y, z } = body.position;
+              const c = train.position;
+              if (x > c.x + t_width / 2 + redundancy || x < c.x - t_width / 2 - redundancy || z > c.z + t_thickness / 2 + redundancy || z < c.z - t_thickness / 2 - redundancy) {
+                return false;
+              } else {
+                return true;
+              }
+            }
+
+            // 设置乘客所在区域，如果乘客掉出站台和列车外，立即清除
+            if (inPlatform(body)) {
+              body.area = "platform";
+            } else if (inTrain(body)) {
+              body.area = "train";
+            } else {
+              world.removeBody(body);
+              scene.remove(body.threeParent);
+              arr = arr.filter((item) => item !== body.threeParent);
+            }
+          });
+        });
+
+        // 涌向车门，并随机抖动
+        requestAnimationFrame(function h() {
+          requestAnimationFrame(h);
+          // 遍历world找出people
+          world.bodies.forEach((body) => {
+            if (body.name !== "people") return;
+            const { x, y, z } = body.position; // 位置
+            if (body.area == "platform") {
+              let force = new CANNON.Vec3(width / 2 - x, 0, 0 - z); // 指向车门的力
+              force.normalize();
+              const scale = train.state == "opened" ? 50 : 20;
+              force = force.scale(scale); // 缩放
+              body.applyForce(force);
+            }
+
+            // 随机抖动
+            if (Math.random() > 0.5) {
+              // 抖动系数
+              let f = 7;
+              let force = new CANNON.Vec3(Math.random() * f - f / 2, Math.random(), Math.random() * f - f / 2); // 指向车门的力;
+              // 随机冲量力
+              body.applyImpulse(force);
+            }
+          });
+        });
+
+        let firstPreview = true;
+
+        // 页面运行后，5秒钟列车开始进站
+        setTimeout(() => {
+          train.in();
+        }, 5000);
+
+        // 列车进站后，1秒钟打开车门
+        train.on("ined", () => {
+          firstPreview &&
+            setTimeout(() => {
+              train.openDoor();
+            }, 1000);
+        });
+
+        // 列车开门后，5秒钟关闭车门
+        train.on("opened", () => {
+          firstPreview &&
+            setTimeout(() => {
+              train.closeDoor();
+            }, 5000);
+        });
+
+        // 列车关门后，1秒钟列车出站
+        train.on("closed", () => {
+          firstPreview &&
+            setTimeout(() => {
+              train.out();
+            }, 1000);
+        });
+
+        // 列车出站后，补齐100人，操作按钮解放
+        train.on("outed", () => {
+          // 补齐100个乘客
+          let timer = setInterval(() => {
+            if (arr.length >= peopleNum) clearInterval(timer); // 移除监听
+            createPeople();
+          }, 50);
+
+          // 首次预览
+          if (firstPreview) {
+            document.querySelector(".operate").classList.remove("firstPreview");
+            document.querySelector(".operate").classList.add("outed");
+            firstPreview = false;
+          }
+        });
+
+        // 更新操作按钮类名
+        requestAnimationFrame(function h() {
+          requestAnimationFrame(h);
+          if (firstPreview) return;
+          const arr = ["in", "ined", "open", "opened", "close", "closed", "out", "outed"];
+          function removeClass(arr) {
+            arr.forEach((className) => {
+              document.querySelector(".operate").classList.remove(className);
+            });
+          }
+          removeClass(arr);
+          document.querySelector(".operate").classList.add(train.state);
+        });
+
+        document.querySelector(".button_in").addEventListener("pointerup", function () {
+          if (train.state == "outed") train.in();
+        });
+        document.querySelector(".button_open").addEventListener("pointerup", function () {
+          if (train.state == "closed" || train.state == "ined") train.openDoor();
+        });
+        document.querySelector(".button_close").addEventListener("pointerup", function () {
+          if (train.state == "opened") train.closeDoor();
+        });
+        document.querySelector(".button_out").addEventListener("pointerup", function () {
+          if (train.state == "closed" || train.state == "ined" || train.state == "inded") train.out();
+        });
+      })();
+    </script>
+  </body>
+</html>
